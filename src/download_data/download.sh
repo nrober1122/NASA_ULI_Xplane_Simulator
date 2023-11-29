@@ -1,6 +1,6 @@
 # these are the URLS for data at the stanford website
 
-download_dir=${NASA_DATA_DIR}/downsampled/
+download_dir=${NASA_ULI_DATA_DIR}/downsampled/
 rm -rf ${download_dir}
 mkdir -p ${download_dir}
 

@@ -4,6 +4,7 @@
 import controllers
 import fully_observable
 import tiny_taxinet
+import pretrained_dnn
 
 """ 
 Parameters to be specified by user
@@ -19,7 +20,9 @@ DUBINS = False
 # 'fully_observable' - true state is known
 # 'tiny_taxinet'     - state is estimated using the tiny taxinet neural network from
 #                      image observations of the true state
-STATE_ESTIMATOR = 'fully_observable'
+# STATE_ESTIMATOR = 'fully_observable'
+# STATE_ESTIMATOR = 'tiny_taxinet'
+STATE_ESTIMATOR = 'dnn'
 
 # Time of day in local time, e.g. 8.0 = 8AM, 17.0 = 5PM
 TIME_OF_DAY = 8.0
@@ -38,7 +41,7 @@ START_HE = 0.0
 START_DTP = 322.0
 
 # Downtrack positions (in meters) to end the simulation
-END_DTP = 422.0
+END_DTP = 522.0
 
 """
 Parameters for Dubin's Model
@@ -68,6 +71,8 @@ if STATE_ESTIMATOR == 'tiny_taxinet':
     GET_STATE = tiny_taxinet.getStateTinyTaxiNet
 elif STATE_ESTIMATOR == 'fully_observable':
     GET_STATE = fully_observable.getStateFullyObservable
+elif STATE_ESTIMATOR == 'dnn':
+    GET_STATE = pretrained_dnn.getStateDNN
 else:
     print("Invalid state estimator name - assuming fully observable")
     GET_STATE = fully_observable.getStateFullyObservable

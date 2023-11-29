@@ -30,7 +30,7 @@ from plot_utils import *
 # make sure this is a system variable in your bashrc
 NASA_ULI_ROOT_DIR=os.environ['NASA_ULI_ROOT_DIR']
 
-DATA_DIR = os.environ['NASA_DATA_DIR'] 
+DATA_DIR = os.environ['NASA_ULI_DATA_DIR'] 
 
 # where intermediate results are saved
 # never save this to the main git repo
@@ -182,7 +182,7 @@ if __name__=='__main__':
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     print('found device: ', device)
-    quantize = True
+    quantize = False
     
     # condition
     condition = 'morning'
@@ -225,7 +225,7 @@ if __name__=='__main__':
 
     dataloader_params = {'batch_size': 512,
                          'shuffle': True,
-                         'num_workers': 12,
+                         'num_workers': 8,
                          'drop_last': False}
 
 
@@ -259,5 +259,5 @@ if __name__=='__main__':
     model = train_model(model, datasets, dataloaders, loss_func, optimizer, device, results_dir, num_epochs=train_options['epochs'], log_every=100)
 
     # save the best model to the directory
-    torch.save(model.state_dict(), results_dir + "/best_model.pt")
+    torch.save(model.state_dict(), results_dir + "/best_model_nick.pt")
 

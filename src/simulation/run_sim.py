@@ -5,6 +5,7 @@ import time
 import numpy as np
 import sys
 import os
+import torch
 
 # make sure this is a system variable in your bashrc
 NASA_ULI_ROOT_DIR = os.environ['NASA_ULI_ROOT_DIR']
@@ -69,6 +70,8 @@ def simulate_controller(client, startCTE, startHE, startDTP, endDTP, getState, g
             throttle = 0.2
 
         cte, he = getState(client)
+        print("CROSS TRACK ERROR: ", cte)
+        print("HEADING ERROR: ", he)
         rudder = getControl(client, cte, he)
         client.sendCTRL([0, rudder, rudder, throttle])
 

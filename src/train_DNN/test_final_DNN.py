@@ -16,7 +16,7 @@ from plot_utils import *
 # make sure this is a system variable in your bashrc
 NASA_ULI_ROOT_DIR=os.environ['NASA_ULI_ROOT_DIR']
 
-DATA_DIR = os.environ['NASA_DATA_DIR'] 
+DATA_DIR = os.environ['NASA_ULI_DATA_DIR'] 
 
 # where intermediate results are saved
 # never save this to the main git repo
@@ -39,7 +39,7 @@ def test_model(model, dataset, dataloader, device, loss_func, print_mode = False
     for inputs, labels in tqdm(dataloader):
         inputs = inputs.to(device)
         labels = labels.to(device)
-    
+        import pdb; pdb.set_trace()
         # forward
         # track history if only in train
         start = time.time()

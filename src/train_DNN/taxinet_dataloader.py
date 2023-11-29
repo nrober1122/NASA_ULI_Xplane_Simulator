@@ -79,10 +79,10 @@ class TaxiNetDataset(torch.utils.data.Dataset):
         # there are many states of interest, you can modify to access which ones you want
         dist_centerline_norm = specific_row['distance_to_centerline_NORMALIZED'].item()
         # normalized downtrack position
-        downtrack_position_norm = specific_row['downtrack_position_NORMALIZED'].item()
+        heading_error_norm = specific_row['heading_error_NORMALIZED'].item()
 
         # add tensor
-        target_tensor_list = [dist_centerline_norm, downtrack_position_norm]
+        target_tensor_list = [dist_centerline_norm, heading_error_norm]
 
         # concatenate all image tensors
         target_tensor = torch.tensor(target_tensor_list)
