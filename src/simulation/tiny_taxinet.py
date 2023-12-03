@@ -1,12 +1,12 @@
-from nnet import *
-from PIL import Image
-
-import numpy as np
+import os
+from loguru import logger
 import time
 
-import mss
 import cv2
-import os
+import mss
+import numpy as np
+from nnet import *
+from PIL import Image
 
 # Read in the network
 filename = "../../models/TinyTaxiNet.nnet"
@@ -33,16 +33,26 @@ def getCurrentImage():
         for other resolutions
     """
     # Get current screenshot
-    img = cv2.cvtColor(np.array(screenShot.grab(monitor)),
-                       cv2.COLOR_BGRA2BGR)[230:, :, :]
+    # (960, 1720, 4)
+    img = np.array(screenShot.grab(monitor))
+    logger.info("1: img.shape: {}".format(img.shape))
+
+    # (730, 1720, 3)
+    img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)[230:, :, :]
+    logger.info("2: img.shape: {}".format(img.shape))
+
+    # (200, 360, 3)
     img = cv2.resize(img, (screen_width, screen_height))
+    logger.info("3: img.shape: {}".format(img.shape))
     img = img[:, :, ::-1]
     img = np.array(img)
 
     # Convert to grayscale, crop out nose, sky, bottom of image, resize to 256x128, scale so
     # values range between 0 and 1
     img = np.array(Image.fromarray(img).convert('L').crop(
-        (55, 5, 360, 135)).resize((256, 128)))/255.0
+        (55, 5, 360, 135)).resize((256, 128)))
+    Image.fromarray(img).save("taxinet_img.png")
+    img = img/255.0
 
     # Downsample image
     # Split image into stride x stride boxes, average numPix brightest pixels in that box

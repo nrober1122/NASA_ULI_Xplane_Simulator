@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def getProportionalControl(client, cte, he):
     """ Returns rudder command using proportional control
         for use with X-Plane 11 dynamics
