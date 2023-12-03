@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class NNet():
     """
     Class that represents a fully connected ReLU network from a .nnet file

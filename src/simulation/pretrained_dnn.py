@@ -1,15 +1,13 @@
-from nnet import *
-from PIL import Image
-
-from torchvision import transforms
-import torch
-import numpy as np
+import os
 import time
 
-import mss
 import cv2
-import os
-
+import mss
+import numpy as np
+import torch
+from nnet import *
+from PIL import Image
+from torchvision import transforms
 
 from train_DNN.model_taxinet import TaxiNetDNN
 
