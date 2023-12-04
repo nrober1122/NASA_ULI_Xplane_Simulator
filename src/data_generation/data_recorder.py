@@ -16,6 +16,8 @@ import mss
 import cv2
 
 import settings
+from torchvision import transforms
+from PIL import Image
 
 screenShot = mss.mss()
 
@@ -115,6 +117,24 @@ def addCurrData(client, outDir, csvFile, startTime, currStep, episodeNum):
     img_name = 'MWH_Runway04_' + time_period + '_' + weather + '_' + str(episodeNum) + '_' + str(currStep) + '.png'
     # For now, just save the image to an output directory
     cv2.imwrite('%s%s' % (outDir, img_name), img)
+
+
+    # SCRATCH_DIR=os.environ['NASA_ULI_ROOT_DIR'] + '/scratch'
+    # debug_dir = SCRATCH_DIR + '/debug/'
+    # tfms = transforms.Compose([transforms.Resize((224, 224)),
+    #                                     transforms.ToTensor(),
+    #                                     transforms.Normalize([0.485, 0.456, 0.406],
+    #                                                          [0.229, 0.224, 0.225]),])
+
+    # # pil_img4 = Image.open(SCRATCH_DIR + 'debug/untransformed_day3.png').convert('RGB')
+    # pil_img4 = Image.fromarray(img)
+    # # pil_img4.save(debug_dir+'resave_ss_day3.png')
+    # # import pdb; pdb.set_trace()
+    # # tfms(img)
+    # tfm_img4 = tfms(pil_img4)
+    # img4 = tfm_img4.detach().numpy().transpose([1, 2, 0])
+    # pil_img42 = Image.fromarray((img4 * 225).astype(np.uint8))
+    # pil_img42.save(debug_dir+'data_recorder_day3.png')
 
     # Append everything to the csv file
     with open(csvFile, 'a') as fd:

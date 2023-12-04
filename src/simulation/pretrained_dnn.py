@@ -61,8 +61,6 @@ def getCurrentImage():
     outDir = debug_dir
     # For now, just save the image to an output directory
     cv2.imwrite('%s%s' % (outDir, img_name), img)
-    
-
 
     tfms = transforms.Compose([transforms.Resize((width, height)),
                                         transforms.ToTensor(),
@@ -71,21 +69,23 @@ def getCurrentImage():
     # tfms = transforms.Compose([transforms.Resize((width, height)), transforms.ToTensor()])
     pil_img3 = Image.open(outDir + img_name )
     tfm_img3 = tfms(pil_img3)
-    img3 = tfm_img3.detach().numpy().transpose([1, 2, 0])
-    pil_img32 = Image.fromarray((img3 * 225).astype(np.uint8))
-    pil_img32.save(debug_dir+'my_method_from_data_simulated_day3.png')
 
-    pil_img = Image.fromarray(img)
-    tfm_img = tfms(pil_img)
+    # img3 = tfm_img3.detach().numpy().transpose([1, 2, 0])
+    # pil_img32 = Image.fromarray((img3 * 225).astype(np.uint8))
+    # pil_img32.save(debug_dir+'my_method_from_data_simulated_day3.png')
 
-    pil_img.save(debug_dir+'untransformed_day3.png')
+    # pil_img = Image.fromarray(img)
+    # tfm_img = tfms(pil_img)
+
+    # pil_img.save(debug_dir+'untransformed_day3.png')
     
-    img3 = tfm_img.detach().numpy().transpose([1, 2, 0])
-    pil_img32 = Image.fromarray((img3 * 225).astype(np.uint8))
-    pil_img32.save(debug_dir+'direct_transformed_day3.png')
+    # img3 = tfm_img.detach().numpy().transpose([1, 2, 0])
+    # pil_img32 = Image.fromarray((img3 * 225).astype(np.uint8))
+    # pil_img32.save(debug_dir+'direct_transformed_day3.png')
+    
     # tfm_img.save(debug_dir+'transformed_day3.png')
 
-
+    
     # import pdb; pdb.set_trace()
 
 

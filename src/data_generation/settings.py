@@ -1,3 +1,4 @@
+import os
 # Defines settings for collecting training data by running sinusoidal trajectories
 # Written by Sydney Katz (smkatz@stanford.edu)
 
@@ -9,7 +10,8 @@ Parameters to be specified by user
 # Directory to save output data
 # NOTE: CSV file and images will be overwritten if already exists in that directory, but
 # extra images (for time steps that do not occur in the new episodes) will not be deleted
-OUT_DIR = "/scratch/smkatz/NASA_ULI/benchmark/example/"
+NASA_ULI_ROOT_DIR=os.environ['NASA_ULI_ROOT_DIR']
+OUT_DIR = NASA_ULI_ROOT_DIR + "/scratch/large_images/morning_nick/morning_nick_validation/"
 
 # # Time of day in local time, e.g. 8.0 = 8AM, 17.0 = 5PM
 # TIME_OF_DAY = 8.0
@@ -22,7 +24,7 @@ TIME_OF_DAY_END = 11.0
 
 # Cloud cover (higher numbers are cloudier/darker)
 # 0 = Clear, 1 = Cirrus, 2 = Scattered, 3 = Broken, 4 = Overcast
-CLOUD_COVER = 4
+CLOUD_COVER = 0
 
 # Cases to run (determines how other variables are set)
 # example    - runs 2 short trajectories (used for initial testing)

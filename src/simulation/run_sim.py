@@ -70,8 +70,11 @@ def simulate_controller(client, startCTE, startHE, startDTP, endDTP, getState, g
             throttle = 0.2
 
         cte, he = getState(client)
-        print("CROSS TRACK ERROR: ", cte)
-        print("HEADING ERROR: ", he)
+
+        cte_true, _, he_true = xpc3_helper.getHomeState(client)
+        print("CROSS TRACK ERROR: ", cte_true)
+        print("HEADING ERROR: ", he_true)
+        
         rudder = getControl(client, cte, he)
         client.sendCTRL([0, rudder, rudder, throttle])
 
