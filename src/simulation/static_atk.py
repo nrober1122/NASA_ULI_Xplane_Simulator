@@ -5,9 +5,9 @@ from typing import Optional
 import numpy as np
 import torch
 
-from tiny_taxinet_train.model_tiny_taxinet import TinyTaxiNetDNN
+from attack.train_static_tinytaxinet import TinyTaxiNetAttackStatic
 
-_network: Optional[TinyTaxiNetDNN] = None
+_network: Optional[TinyTaxiNetAttackStatic] = None
 
 
 def _load_network():
@@ -18,12 +18,13 @@ def _load_network():
 
     NASA_ULI_ROOT_DIR = pathlib.Path(os.environ["NASA_ULI_ROOT_DIR"])
     scratch_dir = NASA_ULI_ROOT_DIR / "scratch"
-    model_path = scratch_dir / "tiny_taxinet_DNN_train/morning/best_model.pt"
+    model_path = scratch_dir / "tiny_taxinet_attack_static/model_atk.pt"
     assert model_path.exists()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    _network = TinyTaxiNetDNN()
+    image_size = (8, 16)
+    _network = TinyTaxiNetAttackStatic(image_size, 0.0, 0.0)
     _network.load_state_dict(torch.load(model_path, map_location=device))
     _network.eval()
 
@@ -33,12 +34,8 @@ def get_network():
     return _network
 
 
-def evaluate_network(image: np.ndarray):
+def get_patch(image: np.ndarray):
     _load_network()
     assert image.shape == (128,)
-    # Unlike the nnet one, this takes does the flattening inside. We can still flatten though and it should be fine.
     with torch.inference_mode():
-        pred = _network.forward(torch.Tensor(image[None, :, None]))
-        pred = pred.numpy().squeeze()
-        # [ cte, heading ]
-        return pred[0], pred[1]
+        return _network.patch.detach().cpu().numpy().flatten()

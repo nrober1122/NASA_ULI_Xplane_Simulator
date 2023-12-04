@@ -150,7 +150,7 @@ def _normalize_image(image: np.ndarray):
 def process_image(image: np.ndarray) -> np.ndarray:
     """Process the image for use with TinyTaxiNet.
     Input: (1080, 1920, 4)
-    Output: (128,)
+    Output: (128 = 8 * 16,)
     """
     assert image.shape == (1080, 1920, 4)
     image = _normalize_image(_downsample_image(_crop_image(image)))
@@ -160,7 +160,7 @@ def process_image(image: np.ndarray) -> np.ndarray:
 
 def evaluate_network(image: np.ndarray):
     """Evaluate the network on the preprocessed image.
-    Image: (128,)
+    Image: (128 = 8 * 16,)
     """
     pred = network.evaluate_network(image)
     return pred[0], pred[1]
