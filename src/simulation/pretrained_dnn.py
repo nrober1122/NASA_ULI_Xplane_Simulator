@@ -15,7 +15,7 @@ from train_DNN.model_taxinet import TaxiNetDNN
 
 # Read in the network
 NASA_ULI_ROOT_DIR=os.environ['NASA_ULI_ROOT_DIR']
-model_dir = NASA_ULI_ROOT_DIR + '/pretrained_DNN/'
+model_dir = NASA_ULI_ROOT_DIR + '/pretrained_DNN_nick/'
 debug_dir = NASA_ULI_ROOT_DIR + '/scratch/debug/'
 # filename = "../../models/TinyTaxiNet.nnet"
 # network = NNet(filename)
@@ -57,6 +57,11 @@ def getCurrentImage():
     img = cv2.cvtColor(np.array(screenShot.grab(monitor)),
                        cv2.COLOR_BGRA2BGR)[230:, :, :]
     img = cv2.resize(img, (screen_width, screen_height))
+    img_name = 'saving_from_run_ss.png'
+    outDir = debug_dir
+    # For now, just save the image to an output directory
+    cv2.imwrite('%s%s' % (outDir, img_name), img)
+    
 
 
     tfms = transforms.Compose([transforms.Resize((width, height)),
@@ -64,12 +69,23 @@ def getCurrentImage():
                                         transforms.Normalize([0.485, 0.456, 0.406],
                                                              [0.229, 0.224, 0.225]),])
     # tfms = transforms.Compose([transforms.Resize((width, height)), transforms.ToTensor()])
+    pil_img3 = Image.open(outDir + img_name )
+    tfm_img3 = tfms(pil_img3)
+    img3 = tfm_img3.detach().numpy().transpose([1, 2, 0])
+    pil_img32 = Image.fromarray((img3 * 225).astype(np.uint8))
+    pil_img32.save(debug_dir+'my_method_from_data_simulated_day3.png')
+
     pil_img = Image.fromarray(img)
     tfm_img = tfms(pil_img)
 
-    # pil_img.save(debug_dir+'untransformed.png')
+    pil_img.save(debug_dir+'untransformed_day3.png')
     
-    # tfm_img.save(debug_dir+'transformed.png')
+    img3 = tfm_img.detach().numpy().transpose([1, 2, 0])
+    pil_img32 = Image.fromarray((img3 * 225).astype(np.uint8))
+    pil_img32.save(debug_dir+'direct_transformed_day3.png')
+    # tfm_img.save(debug_dir+'transformed_day3.png')
+
+
     # import pdb; pdb.set_trace()
 
 
@@ -97,7 +113,10 @@ def getCurrentImage():
     # img2 += 0.5
     # img2[img2 > 1] = 1
     # img2[img2 < 0] = 0
-    return tfm_img
+    # import pdb; pdb.set_trace()
+    # tfm_img = torch.transpose(tfm_img, 0, 2)
+    # tfm_img = torch.transpose(tfm_img, 0, 1)
+    return tfm_img3
 
 def getStateDNN(client):
     """ Returns an estimate of the crosstrack error (meters)
@@ -108,11 +127,14 @@ def getStateDNN(client):
             client: XPlane Client
     """
     image = getCurrentImage()
+    # import pdb; pdb.set_trace()
     image = image.reshape(1, 3, width, height)
     # import pdb; pdb.set_trace()
 
-    pred = model(image)
-    pred = pred.detach().numpy().flatten()
+    pred = model(image.to(device))
+    # import pdb; pdb.set_trace()
+    pred = pred.cpu().detach().numpy().flatten()
     # import pdb; pdb.set_trace()
     
-    return pred[0]*10, pred[1]
+    return pred[0]*10, pred[1]*30
+
