@@ -11,8 +11,10 @@ import ipdb
 import matplotlib.pyplot as plt
 import numpy as np
 import settings
+import tiny_taxinet
+import tiny_taxinet2
 from loguru import logger
-from tiny_taxinet import evaluate_network, process_image
+from tiny_taxinet import process_image
 from xplane_screenshot import get_xplane_image
 
 import xpc3
@@ -71,7 +73,8 @@ def simulate_controller(
 
         image_raw = get_xplane_image()
         image_processed = process_image(image_raw)
-        cte, he = evaluate_network(image_processed)
+        # cte, he = tiny_taxinet.evaluate_network(image_processed)
+        cte, he = tiny_taxinet2.evaluate_network(image_processed)
         logger.info("CTE: {:.2f}, HE: {:.2f}".format(cte, he))
         rudder = get_control(client, cte, he)
         client.sendCTRL([0, rudder, rudder, throttle])

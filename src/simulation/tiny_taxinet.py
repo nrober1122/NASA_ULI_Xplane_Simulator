@@ -160,7 +160,7 @@ def process_image(image: np.ndarray) -> np.ndarray:
 
 def evaluate_network(image: np.ndarray):
     """Evaluate the network on the preprocessed image.
-    Image: (8, 16)
+    Image: (128,)
     """
     pred = network.evaluate_network(image)
     return pred[0], pred[1]
