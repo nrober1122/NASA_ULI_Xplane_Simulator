@@ -25,6 +25,7 @@ import xpc3_helper
 def get_state(image_raw: np.ndarray):
     image_processed = process_image(image_raw)
     image_processed += static_atk.get_patch(image_processed)
+    image_processed = image_processed.clip(0, 1)
 
     # cte, he = tiny_taxinet.evaluate_network(image_processed)
     cte, he = tiny_taxinet2.evaluate_network(image_processed)
@@ -87,6 +88,9 @@ def simulate_controller(
 
     cte_gt, dtp_gt, he_gt = xpc3_helper.getHomeState(client)
 
+    dt = 1.0
+    # dt = 0.1
+
     while dtp < endDTP and now < run_end_time and np.abs(cte_gt) < 10.5:
         speed = xpc3_helper.getSpeed(client)
         throttle = 0.1
@@ -122,7 +126,7 @@ def simulate_controller(
         T_state_clean.append(state_clean)
 
         # Wait for next timestep. 1 Hz control rate?
-        while endTime - startTime < 1:
+        while endTime - startTime < dt:
             endTime = client.getDREF("sim/time/zulu_time_sec")[0]
             time.sleep(0.001)
 
@@ -135,7 +139,6 @@ def simulate_controller(
 
     client.pauseSim(True)
 
-    dt = 1.0
     T_t = np.arange(len(T_state_gt)) * dt
 
     T_state_gt = np.stack(T_state_gt, axis=0)
