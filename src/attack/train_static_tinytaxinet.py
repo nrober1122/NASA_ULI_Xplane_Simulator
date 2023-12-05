@@ -95,6 +95,7 @@ def train_model_atk(
 
 def main():
     scratch_dir = pathlib.Path(NASA_ULI_ROOT_DIR) / "scratch"
+    models_dir = pathlib.Path(NASA_ULI_ROOT_DIR) / "models"
     results_dir = scratch_dir / "tiny_taxinet_attack_static"
     results_dir.mkdir(exist_ok=True, parents=True)
 

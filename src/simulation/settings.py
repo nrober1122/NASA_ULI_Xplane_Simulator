@@ -22,8 +22,8 @@ DUBINS = False
 # 'tiny_taxinet'     - state is estimated using the tiny taxinet neural network from
 #                      image observations of the true state
 # STATE_ESTIMATOR = 'fully_observable'
-# STATE_ESTIMATOR = 'tiny_taxinet'
-STATE_ESTIMATOR = 'dnn'
+STATE_ESTIMATOR = 'tiny_taxinet'
+# STATE_ESTIMATOR = 'dnn'
 
 # Time of day in local time, e.g. 8.0 = 8AM, 17.0 = 5PM
 TIME_OF_DAY = 8.0
