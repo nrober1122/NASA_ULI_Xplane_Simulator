@@ -6,6 +6,7 @@ import fully_observable
 import pretrained_dnn
 import tiny_taxinet
 import tiny_taxinet2
+import static_atk
 
 """ 
 Parameters to be specified by user
@@ -18,12 +19,19 @@ Parameters to be specified by user
 DUBINS = False
 
 # Type of state estimation
-# 'fully_observable' - true state is known
 # 'tiny_taxinet'     - state is estimated using the tiny taxinet neural network from
 #                      image observations of the true state
-# STATE_ESTIMATOR = 'fully_observable'
+# 'dnn'              - state is estimated using the resnet neural network from
+#                      image observations of the true state
 STATE_ESTIMATOR = 'tiny_taxinet'
 # STATE_ESTIMATOR = 'dnn'
+
+# Type of adversarial attack
+# None                  - No adversarial attack
+# static_atk.get_patch  - patch generated for tiny taxinet
+
+# ATTACK = None
+ATTACK = static_atk
 
 # Time of day in local time, e.g. 8.0 = 8AM, 17.0 = 5PM
 TIME_OF_DAY = 8.0
