@@ -154,6 +154,7 @@ def process_image(image: np.ndarray) -> np.ndarray:
     """
     assert image.shape == (1080, 1920, 4)
     image = _normalize_image(_downsample_image(_crop_image(image)))
+    image = image.clip(0, 1)
     assert image.shape == (128,)
     return image
 

@@ -2,6 +2,7 @@ import os
 import sys
 
 xpc3_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/src/"
+results_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/results/"
 sys.path.append(xpc3_dir)
 
 import time
@@ -11,31 +12,29 @@ import ipdb
 import matplotlib.pyplot as plt
 import numpy as np
 import settings
-import static_atk
-import tiny_taxinet
-import tiny_taxinet2
+# import static_atk
+# import tiny_taxinet
+# import tiny_taxinet2
 from loguru import logger
-from tiny_taxinet import process_image
+# from tiny_taxinet import process_image
 from xplane_screenshot import get_xplane_image
+# from PIL import Image
 
 import xpc3
 import xpc3_helper
 
 
-def get_state(image_raw: np.ndarray):
-    image_processed = process_image(image_raw)
-    image_processed += static_atk.get_patch(image_processed)
-    image_processed = image_processed.clip(0, 1)
+def get_state(image_raw: np.ndarray, attack: Callable = None):
+    # Process image before passing it to NN estimator
+    image_processed = settings.PROCESS_IMG(image_raw)
 
-    # cte, he = tiny_taxinet.evaluate_network(image_processed)
-    cte, he = tiny_taxinet2.evaluate_network(image_processed)
+    # Add adversarial attack if applicable
+    if attack is not None:
+        image_processed += attack.get_patch(image_processed)
 
-    return cte, he, image_processed
+    # Estimate state from processed image
+    cte, he = settings.GET_STATE(image_processed)
 
-
-def get_state_clean(image_raw: np.ndarray):
-    image_processed = process_image(image_raw)
-    cte, he = tiny_taxinet2.evaluate_network(image_processed)
     return cte, he, image_processed
 
 
@@ -107,12 +106,12 @@ def simulate_controller(
         image_raw = get_xplane_image()
         T_image_raw.append(image_raw)
 
-        cte, he, img = get_state(image_raw)
+        cte, he, img = get_state(image_raw, attack=None)
         logger.info("CTE: {:.2f} ({:.2f}), HE: {:.2f} ({:.2f})".format(cte, cte_gt, he, he_gt))
         rudder = get_control(client, cte, he)
         client.sendCTRL([0, rudder, rudder, throttle])
 
-        cte_clean, he_clean, img_clean = get_state_clean(image_raw)
+        cte_clean, he_clean, img_clean = get_state(image_raw)
         rudder_clean = get_control(client, cte_clean, he_clean)
         T_rudder_clean.append(rudder_clean)
         T_rudder.append(rudder)
@@ -157,7 +156,7 @@ def simulate_controller(
         ax.plot(T_t, T_state_est[:, ii], color="C1", label="Estimated")
         ax.set_ylabel(labels[ii], rotation=0, ha="right")
     axes[0].legend()
-    fig.savefig("sim2_traj.pdf")
+    fig.savefig(results_dir + "sim2_traj.pdf")
     plt.close(fig)
     ###############################################3
     # x axis = DTP, y axis = CTE.
@@ -171,12 +170,12 @@ def simulate_controller(
     ax.set_ylim(ymin, ymax)
     ax.axhspan(cte_constr, ymax, color="C0", alpha=0.2)
     ax.axhspan(-cte_constr, ymin, color="C0", alpha=0.2)
-    fig.savefig("sim2_plot2d.pdf")
+    fig.savefig(results_dir + "sim2_plot2d.pdf")
     plt.close(fig)
 
     # Save the data.
     np.savez(
-        "sim2_data.npz",
+        results_dir + "sim2_data.npz",
         T_state_gt=T_state_gt,
         T_state_clean=T_state_clean,
         T_state_est=T_state_est,
