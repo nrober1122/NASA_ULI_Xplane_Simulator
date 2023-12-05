@@ -15,7 +15,7 @@ from tiny_taxinet_train.model_tiny_taxinet import TinyTaxiNetDNN
 from tiny_taxinet_train.tiny_taxinet_dataloader import tiny_taxinet_prepare_dataloader
 
 NASA_ULI_ROOT_DIR = os.environ["NASA_ULI_ROOT_DIR"]
-DATA_DIR = os.environ["NASA_DATA_DIR"]
+DATA_DIR = os.environ["NASA_ULI_DATA_DIR"]
 
 
 class TinyTaxiNetAttackStatic(torch.nn.Module):

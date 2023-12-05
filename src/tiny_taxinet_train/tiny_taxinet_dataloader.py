@@ -11,7 +11,7 @@ import torchvision
 # make sure this is a system variable in your bashrc
 NASA_ULI_ROOT_DIR = os.environ["NASA_ULI_ROOT_DIR"]
 
-DATA_DIR = os.environ["NASA_DATA_DIR"]
+DATA_DIR = os.environ["NASA_ULI_DATA_DIR"]
 
 from torch.utils.data import DataLoader, TensorDataset
 from torchvision import transforms
