@@ -94,8 +94,9 @@ def train_model_atk(
 
 
 def main():
-    scratch_dir = pathlib.Path(NASA_ULI_ROOT_DIR) / "scratch"
-    results_dir = scratch_dir / "tiny_taxinet_attack_static"
+    # scratch_dir = pathlib.Path(NASA_ULI_ROOT_DIR) / "scratch"
+    models_dir = pathlib.Path(NASA_ULI_ROOT_DIR) / "models"
+    results_dir = models_dir / "tiny_taxinet_attack_static"
     results_dir.mkdir(exist_ok=True, parents=True)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
