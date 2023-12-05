@@ -2,7 +2,7 @@ import os
 import sys
 
 xpc3_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/src/"
-results_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/results/"
+scratch_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/scratch/results"
 sys.path.append(xpc3_dir)
 
 import time
