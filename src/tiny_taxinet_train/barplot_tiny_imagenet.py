@@ -1,7 +1,9 @@
-import seaborn as sns
+import os
+import sys
+
 import matplotlib.pyplot as plt
 import pandas
-import sys, os
+import seaborn as sns
 
 sns.set_theme(style="ticks", palette="pastel")
 

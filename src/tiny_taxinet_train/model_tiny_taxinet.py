@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
-from torchvision import models
 import torch.nn.functional as F
+from torchvision import models
 
 '''
     small model for tiny taxinet
@@ -32,7 +32,7 @@ class TinyTaxiNetDNN(nn.Module):
         self.fc3 = torch.nn.Linear(8, 8)
         self.fc4 = torch.nn.Linear(8, 2)
 
-    def forward(self, z):
+    def forward(self, z: torch.Tensor) -> torch.Tensor:
         x = torch.flatten(z, 1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))

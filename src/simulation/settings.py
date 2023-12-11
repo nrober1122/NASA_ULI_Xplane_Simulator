@@ -3,8 +3,11 @@
 
 import controllers
 import fully_observable
-import tiny_taxinet
 import pretrained_dnn
+import tiny_taxinet
+import tiny_taxinet2
+import static_atk
+import static_atk_dnn
 
 """ 
 Parameters to be specified by user
@@ -17,12 +20,20 @@ Parameters to be specified by user
 DUBINS = False
 
 # Type of state estimation
-# 'fully_observable' - true state is known
 # 'tiny_taxinet'     - state is estimated using the tiny taxinet neural network from
 #                      image observations of the true state
-# STATE_ESTIMATOR = 'fully_observable'
+# 'dnn'              - state is estimated using the resnet neural network from
+#                      image observations of the true state
 # STATE_ESTIMATOR = 'tiny_taxinet'
 STATE_ESTIMATOR = 'dnn'
+
+# Type of adversarial attack
+# None                  - No adversarial attack
+# static_atk.get_patch  - patch generated for tiny taxinet
+
+# ATTACK = None
+# ATTACK = static_atk
+ATTACK = static_atk_dnn
 
 # Time of day in local time, e.g. 8.0 = 8AM, 17.0 = 5PM
 TIME_OF_DAY = 8.0
@@ -48,7 +59,7 @@ Parameters for Dubin's Model
 """
 
 # Time steps for the dynamics in seconds
-DT = 0.05
+DT = 0.1
 
 # Frequency to get new control input 
 # (e.g. if DT=0.5, CTRL_EVERY should be set to 20 to perform control at a 1 Hz rate)
@@ -68,11 +79,13 @@ else:
 
 # Tells simulator which function to use to estimate the state
 if STATE_ESTIMATOR == 'tiny_taxinet':
-    GET_STATE = tiny_taxinet.getStateTinyTaxiNet
+    PROCESS_IMG = tiny_taxinet.process_image
+    GET_STATE = tiny_taxinet2.evaluate_network
 elif STATE_ESTIMATOR == 'fully_observable':
     GET_STATE = fully_observable.getStateFullyObservable
 elif STATE_ESTIMATOR == 'dnn':
-    GET_STATE = pretrained_dnn.getStateDNN
+    PROCESS_IMG = pretrained_dnn.process_image
+    GET_STATE = pretrained_dnn.evaluate_network
 else:
     print("Invalid state estimator name - assuming fully observable")
     GET_STATE = fully_observable.getStateFullyObservable
