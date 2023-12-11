@@ -18,7 +18,7 @@ import settings
 from loguru import logger
 # from tiny_taxinet import process_image
 from xplane_screenshot import get_xplane_image
-# from PIL import Image
+from PIL import Image
 
 import xpc3
 import xpc3_helper
@@ -30,7 +30,15 @@ def get_state(image_raw: np.ndarray, attack: Callable = None):
 
     # Add adversarial attack if applicable
     if attack is not None:
-        image_processed += attack.get_patch(image_processed)
+        image_processed += attack.get_patch(image_processed, 0.022)
+        # pil_img = Image.fromarray((attack.get_patch(image_processed).reshape((8,16)))*255+125)
+        # pil_img = pil_img.convert("L")
+        # pil_img.save(results_dir + 'mask.png')
+
+        # pil2 = Image.fromarray((attack.get_patch(image_processed, 0.022).transpose([1, 2, 0]) * 225).astype(np.uint8))
+        # pil2.save(results_dir + 'dnn_mask.png')
+
+        # import pdb; pdb.set_trace()
 
     # Estimate state from processed image
     cte, he = settings.GET_STATE(image_processed)
@@ -87,8 +95,7 @@ def simulate_controller(
 
     cte_gt, dtp_gt, he_gt = xpc3_helper.getHomeState(client)
 
-    dt = 1.0
-    # dt = 0.1
+    dt = settings.DT
 
     while dtp < endDTP and now < run_end_time and np.abs(cte_gt) < 10.5:
         speed = xpc3_helper.getSpeed(client)

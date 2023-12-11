@@ -7,6 +7,7 @@ import pretrained_dnn
 import tiny_taxinet
 import tiny_taxinet2
 import static_atk
+import static_atk_dnn
 
 """ 
 Parameters to be specified by user
@@ -23,15 +24,16 @@ DUBINS = False
 #                      image observations of the true state
 # 'dnn'              - state is estimated using the resnet neural network from
 #                      image observations of the true state
-STATE_ESTIMATOR = 'tiny_taxinet'
-# STATE_ESTIMATOR = 'dnn'
+# STATE_ESTIMATOR = 'tiny_taxinet'
+STATE_ESTIMATOR = 'dnn'
 
 # Type of adversarial attack
 # None                  - No adversarial attack
 # static_atk.get_patch  - patch generated for tiny taxinet
 
 # ATTACK = None
-ATTACK = static_atk
+# ATTACK = static_atk
+ATTACK = static_atk_dnn
 
 # Time of day in local time, e.g. 8.0 = 8AM, 17.0 = 5PM
 TIME_OF_DAY = 8.0
@@ -57,7 +59,7 @@ Parameters for Dubin's Model
 """
 
 # Time steps for the dynamics in seconds
-DT = 0.05
+DT = 0.1
 
 # Frequency to get new control input 
 # (e.g. if DT=0.5, CTRL_EVERY should be set to 20 to perform control at a 1 Hz rate)
