@@ -121,7 +121,7 @@ def train_model(
                             mean_loss = running_tr_loss / running_n
 
                             log_dict = {"Train/Loss": mean_loss}
-                            wandb.log(log_dict, steep=n_tr_batches_seen)
+                            wandb.log(log_dict, step=n_tr_batches_seen)
 
                             running_tr_loss = 0.0
                             running_n = 0
@@ -140,7 +140,7 @@ def train_model(
                     # writer.add_scalar("loss/val", val_loss, n_tr_batches_seen)
 
                     log_dict = {"Val/Loss": val_loss}
-                    wandb.log(log_dict, steep=n_tr_batches_seen)
+                    wandb.log(log_dict, step=n_tr_batches_seen)
 
                     val_loss_vec.append(val_loss)
 
@@ -175,7 +175,7 @@ def main():
     stride = 8
 
     train_options = {
-        "epochs": 200,
+        "epochs": 2_000,
         "learning_rate": 1e-3,
     }
     dataloader_params = {"batch_size": 256, "shuffle": True, "num_workers": 1, "drop_last": False, "pin_memory": True}
