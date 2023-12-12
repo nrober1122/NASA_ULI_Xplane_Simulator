@@ -172,7 +172,8 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
     # [1, 2, 4, 8]
-    stride = 8
+    # stride = 8
+    stride = 4
 
     train_options = {
         "epochs": 2_000,
@@ -185,7 +186,7 @@ def main():
     n_features_in = width * height
 
     config = {"stride": stride, **train_options}
-    wandb.init(project="tiny_taxinet_train", config=config)
+    wandb.init(project="tiny_taxinet_train", config=config, job_type=f"stride{stride}")
 
     results_dir = remove_and_create_dir(SCRATCH_DIR + f"/tiny_taxinet_train_stride{stride}/")
     model = TinyTaxiNetDNN(n_features_in=n_features_in)

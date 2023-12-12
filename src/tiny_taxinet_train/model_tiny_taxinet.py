@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from loguru import logger
 from torchvision import models
 
-'''
+"""
     small model for tiny taxinet
 
     Follows the SISL Kochenderfer Lab architecture:
@@ -21,16 +22,21 @@ from torchvision import models
     Layer 4: 8
     Output: 2
 
-'''
+"""
+
 
 class TinyTaxiNetDNN(nn.Module):
-    def __init__(self, model_name="TinyTaxiNet", n_features_in: int = 128):
+    def __init__(self, model_name="TinyTaxiNet", n_features_in: int = 128, hid: list = None):
         super(TinyTaxiNetDNN, self).__init__()
 
-        self.fc1 = torch.nn.Linear(n_features_in, 16)
-        self.fc2 = torch.nn.Linear(16, 8)
-        self.fc3 = torch.nn.Linear(8, 8)
-        self.fc4 = torch.nn.Linear(8, 2)
+        if hid is None:
+            hid = [16, 8, 8]
+            logger.info("Using default hidden layer sizes: {}".format(hid))
+
+        self.fc1 = torch.nn.Linear(n_features_in, hid[0])
+        self.fc2 = torch.nn.Linear(hid[0], hid[1])
+        self.fc3 = torch.nn.Linear(hid[1], hid[2])
+        self.fc4 = torch.nn.Linear(hid[2], 2)
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         x = torch.flatten(z, 1)
@@ -42,6 +48,3 @@ class TinyTaxiNetDNN(nn.Module):
         x = self.fc4(x)
 
         return x
-
-
-
