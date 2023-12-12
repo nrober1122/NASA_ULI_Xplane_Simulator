@@ -1,72 +1,55 @@
-"""
-    TINY TAXINET training script
-    Code to train a DNN vision model to predict aircraft state variables
-    REQUIRES:
-        - raw camera images (training) in DATA_DIR + '/nominal_conditions'
-        - validation data in DATA_DIR + '/nominal_conditions_val/'
-
-    FUNCTIONALITY:
-        - DNN is a small custom DNN with learnable final linear layer
-            for regression with N=2 outputs
-        - N=2 state outputs are:
-            - distance_to_centerline
-            - downtrack_position
-        - trains for configurable number of epochs
-        - saves the best model params and loss plot in 
-            - SCRATCH_DIR + '/tiny_taxinet_DNN_train/'
-
-"""
-
 import copy
+import os
+import pathlib
 import time
 
+import h5py
 import ipdb
 import numpy as np
 import torch
+import tqdm
+import wandb
+from loguru import logger
 from model_tiny_taxinet import TinyTaxiNetDNN
-from tiny_taxinet_dataloader import *
-from torch.utils.tensorboard import SummaryWriter
-from tqdm.autonotebook import tqdm as tqdm
+from torch.utils.data import DataLoader, TensorDataset
 
-from train_DNN.plot_utils import basic_plot_ts
+from utils.textfile_utils import remove_and_create_dir
 
-# make sure this is a system variable in your bashrc
 NASA_ULI_ROOT_DIR = os.environ["NASA_ULI_ROOT_DIR"]
-
-DATA_DIR = os.environ["NASA_DATA_DIR"]
-
-# where intermediate results are saved
-# never save this to the main git repo
+DATA_DIR = pathlib.Path(os.environ["NASA_DATA_DIR"])
 SCRATCH_DIR = NASA_ULI_ROOT_DIR + "/scratch/"
 
-UTILS_DIR = NASA_ULI_ROOT_DIR + "/src/utils/"
-sys.path.append(UTILS_DIR)
 
-TRAIN_DNN_DIR = NASA_ULI_ROOT_DIR + "/src/train_DNN/"
-sys.path.append(TRAIN_DNN_DIR)
+def get_dataloader(data_dir: pathlib.Path, stride: int, tts_name: str, dataloader_params) -> DataLoader:
+    label_file = data_dir / f"morning_downsampled_stride{stride}/morning_{tts_name}_stride{stride}.h5"
+    f = h5py.File(label_file, "r")
 
-from model_tiny_taxinet import TinyTaxiNetDNN
-from plot_utils import *
-from textfile_utils import *
-from tiny_taxinet_dataloader import *
+    num_y = 2
+    x_train = f["X_train"][()].astype(np.float32)
+    y_train = f["y_train"][()].astype(np.float32)[:, 0:num_y]
+
+    tensor_dataset = TensorDataset(torch.tensor(x_train), torch.tensor(y_train))
+
+    logger.info("Dataset size: {}".format(len(tensor_dataset)))
+    logger.info("ymin: {}".format(tensor_dataset[:][1][:, 0].min()))
+    logger.info("ymax: {}".format(tensor_dataset[:][1][:, 0].max()))
+    logger.info("ymin: {}".format(tensor_dataset[:][1][:, 1].min()))
+    logger.info("ymax: {}".format(tensor_dataset[:][1][:, 1].max()))
+    tensor_dataloader = DataLoader(tensor_dataset, **dataloader_params)
+    return tensor_dataloader
 
 
-def train_model(model, datasets, dataloaders, loss_func, optimizer, device, results_dir, num_epochs=25, log_every=100):
-    """
-    Trains a model on datatsets['train'] using criterion(model(inputs), labels) as the loss.
-    Returns the model with lowest loss on datasets['val']
-    Puts model and inputs on device.
-    Trains for num_epochs passes through both datasets.
-
-    Writes tensorboard info to ./runs/ if given
-    """
-    writer = None
-    writer = SummaryWriter(log_dir=results_dir)
-
+def train_model(
+    model: TinyTaxiNetDNN,
+    datasets: dict,
+    dataloaders: dict,
+    loss_func,
+    optimizer,
+    device,
+    num_epochs=25,
+    log_every=100,
+):
     model = model.to(device)
-
-    since = time.time()
-
     dataset_sizes = {x: len(datasets[x]) for x in ["train", "val"]}
 
     best_model_wts = copy.deepcopy(model.state_dict())
@@ -80,8 +63,9 @@ def train_model(model, datasets, dataloaders, loss_func, optimizer, device, resu
     train_loss_vec = []
     val_loss_vec = []
 
-    with tqdm(total=num_epochs, position=0) as pbar:
-        pbar2 = tqdm(total=dataset_sizes["train"], position=1)
+    since = time.time()
+    with tqdm.tqdm(total=num_epochs, position=0) as pbar:
+        pbar2 = tqdm.tqdm(total=dataset_sizes["train"], position=1)
         for epoch in range(num_epochs):
             # Each epoch has a training and validation phase
             for phase in ["train", "val"]:
@@ -134,7 +118,8 @@ def train_model(model, datasets, dataloaders, loss_func, optimizer, device, resu
                         if n_tr_batches_seen % log_every == 0:
                             mean_loss = running_tr_loss / running_n
 
-                            writer.add_scalar("loss/train", mean_loss, n_tr_batches_seen)
+                            log_dict = {"Train/Loss": mean_loss}
+                            wandb.log(log_dict, steep=n_tr_batches_seen)
 
                             running_tr_loss = 0.0
                             running_n = 0
@@ -150,7 +135,11 @@ def train_model(model, datasets, dataloaders, loss_func, optimizer, device, resu
 
                 if phase == "val":
                     val_loss = epoch_loss
-                    writer.add_scalar("loss/val", val_loss, n_tr_batches_seen)
+                    # writer.add_scalar("loss/val", val_loss, n_tr_batches_seen)
+
+                    log_dict = {"Val/Loss": val_loss}
+                    wandb.log(log_dict, steep=n_tr_batches_seen)
+
                     val_loss_vec.append(val_loss)
 
                 pbar.set_postfix(tr_loss=tr_loss, val_loss=val_loss)
@@ -172,86 +161,53 @@ def train_model(model, datasets, dataloaders, loss_func, optimizer, device, resu
     print("Training complete in {:.0f}m {:.0f}s".format(time_elapsed // 60, time_elapsed % 60))
     print("Best val Loss: {:4f}".format(best_loss))
 
-    writer.flush()
-
-    # plot the results to a file
-    plot_file = results_dir + "/loss.pdf"
-    basic_plot_ts(train_loss_vec, val_loss_vec, plot_file, legend=["Train Loss", "Val Loss"])
-
     # load best model weights
     model.load_state_dict(best_model_wts)
     return model
 
 
 def main():
-    torch.cuda.empty_cache()
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    # [1, 2, 4, 8]
+    stride = 8
 
     train_options = {
         "epochs": 200,
         "learning_rate": 1e-3,
     }
-
     dataloader_params = {"batch_size": 256, "shuffle": True, "num_workers": 1, "drop_last": False, "pin_memory": True}
 
-    print("found device: ", device)
+    width = 256 // stride
+    height = 128 // stride
+    n_features_in = width * height
 
-    # condition_list = ['afternoon']
+    results_dir = remove_and_create_dir(SCRATCH_DIR + f"/tiny_taxinet_train_stride{stride}/")
+    model = TinyTaxiNetDNN(n_features_in=n_features_in)
 
-    # experiment_list = [['afternoon'], ['morning'], ['overcast'], ['night'], ['afternoon', 'morning', 'overcast', 'night']]
-    experiment_list = [["morning"]]
+    train_dset, train_loader = get_dataloader(DATA_DIR, stride, "train", dataloader_params)
+    val_dset, val_loader = get_dataloader(DATA_DIR, stride, "validation", dataloader_params)
 
-    for condition_list in experiment_list:
+    optimizer = torch.optim.Adam(model.parameters(), lr=train_options["learning_rate"], amsgrad=True)
 
-        condition_str = "_".join(condition_list)
+    loss_func = torch.nn.MSELoss().to(device)
 
-        # where the training results should go
-        results_dir = remove_and_create_dir(SCRATCH_DIR + "/tiny_taxinet_DNN_train/" + condition_str + "/")
+    dsets = {"train": train_dset, "val": val_dset}
+    dataloaders = {"train": train_loader, "val": val_loader}
 
-        # MODEL
-        # instantiate the model and freeze all but penultimate layers
-        model = TinyTaxiNetDNN()
+    model = train_model(
+        model,
+        dsets,
+        dataloaders,
+        loss_func,
+        optimizer,
+        device,
+        num_epochs=train_options["epochs"],
+        log_every=100,
+    )
 
-        # DATALOADERS
-        # instantiate the model and freeze all but penultimate layers
-        train_dataset, train_loader = tiny_taxinet_prepare_dataloader(
-            DATA_DIR, condition_list, "train", dataloader_params
-        )
-
-        val_dataset, val_loader = tiny_taxinet_prepare_dataloader(
-            DATA_DIR, condition_list, "validation", dataloader_params
-        )
-
-        # OPTIMIZER
-        optimizer = torch.optim.Adam(model.parameters(), lr=train_options["learning_rate"], amsgrad=True)
-
-        # LOSS FUNCTION
-        loss_func = torch.nn.MSELoss().to(device)
-
-        # DATASET INFO
-        datasets = {}
-        datasets["train"] = train_dataset
-        datasets["val"] = val_dataset
-
-        dataloaders = {}
-        dataloaders["train"] = train_loader
-        dataloaders["val"] = val_loader
-
-        # train the DNN
-        model = train_model(
-            model,
-            datasets,
-            dataloaders,
-            loss_func,
-            optimizer,
-            device,
-            results_dir,
-            num_epochs=train_options["epochs"],
-            log_every=100,
-        )
-
-        # save the best model to the directory
-        torch.save(model.state_dict(), results_dir + "/best_model.pt")
+    # save the best model to the directory
+    torch.save(model.state_dict(), results_dir + "/best_model.pt")
 
 
 if __name__ == "__main__":

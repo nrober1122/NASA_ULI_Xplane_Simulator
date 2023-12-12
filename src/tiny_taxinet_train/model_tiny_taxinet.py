@@ -24,10 +24,10 @@ from torchvision import models
 '''
 
 class TinyTaxiNetDNN(nn.Module):
-    def __init__(self, model_name="TinyTaxiNet"):
+    def __init__(self, model_name="TinyTaxiNet", n_features_in: int = 128):
         super(TinyTaxiNetDNN, self).__init__()
 
-        self.fc1 = torch.nn.Linear(128, 16)
+        self.fc1 = torch.nn.Linear(n_features_in, 16)
         self.fc2 = torch.nn.Linear(16, 8)
         self.fc3 = torch.nn.Linear(8, 8)
         self.fc4 = torch.nn.Linear(8, 2)
