@@ -20,7 +20,9 @@ DATA_DIR = pathlib.Path(os.environ["NASA_DATA_DIR"])
 SCRATCH_DIR = NASA_ULI_ROOT_DIR + "/scratch/"
 
 
-def get_dataloader(data_dir: pathlib.Path, stride: int, tts_name: str, dataloader_params) -> DataLoader:
+def get_dataloader(
+    data_dir: pathlib.Path, stride: int, tts_name: str, dataloader_params
+) -> tuple[TensorDataset, DataLoader]:
     label_file = data_dir / f"morning_downsampled_stride{stride}/morning_{tts_name}_stride{stride}.h5"
     f = h5py.File(label_file, "r")
 
@@ -36,7 +38,7 @@ def get_dataloader(data_dir: pathlib.Path, stride: int, tts_name: str, dataloade
     logger.info("ymin: {}".format(tensor_dataset[:][1][:, 1].min()))
     logger.info("ymax: {}".format(tensor_dataset[:][1][:, 1].max()))
     tensor_dataloader = DataLoader(tensor_dataset, **dataloader_params)
-    return tensor_dataloader
+    return tensor_dataset, tensor_dataloader
 
 
 def train_model(
@@ -181,6 +183,9 @@ def main():
     width = 256 // stride
     height = 128 // stride
     n_features_in = width * height
+
+    config = {"stride": stride, **train_options}
+    wandb.init(project="tiny_taxinet_train", config=config)
 
     results_dir = remove_and_create_dir(SCRATCH_DIR + f"/tiny_taxinet_train_stride{stride}/")
     model = TinyTaxiNetDNN(n_features_in=n_features_in)
