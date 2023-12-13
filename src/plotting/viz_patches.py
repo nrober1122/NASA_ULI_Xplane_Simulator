@@ -28,10 +28,11 @@ def main():
     delta = 0.03
     norm = Normalize(vmin=-delta, vmax=delta)
 
-    figsize = np.array([2 * S, 2])
+    figsize = np.array([2 * S, 1.2])
     fig, axes = plt.subplots(1, S, figsize=figsize, layout="constrained", dpi=300)
     for ii, ax in enumerate(axes):
         im = ax.imshow(patches[ii], cmap="RdBu_r", norm=norm)
+        ax.set_title("Downsample factor {}".format(S_strides[ii]))
     fig.colorbar(im, ax=ax)
     [ax.axis("off") for ax in axes]
     [ax.grid(False) for ax in axes]
