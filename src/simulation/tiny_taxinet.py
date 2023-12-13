@@ -1,13 +1,10 @@
-import os
-import time
-
 import cv2
 import einops as ei
 import mss
 import numpy as np
-from loguru import logger
-from nnet import *
 from PIL import Image
+
+from simulation.nnet import NNet
 
 # Read in the network
 filename = "../../models/TinyTaxiNet.nnet"
@@ -90,7 +87,7 @@ def getStateTinyTaxiNet(client):
     return pred[0], pred[1]
 
 
-def _crop_image(image_arr: np.ndarray):
+def _resize_image(image_arr: np.ndarray):
     assert image_arr.shape == (1080, 1920, 4)
     # 0: Remove alpha channel.
     image = image_arr[:, :, :3]
@@ -103,14 +100,18 @@ def _crop_image(image_arr: np.ndarray):
     image = image[230:, :, :]
     assert image.shape == (730, 1720, 3)
 
-    # 3: Resize image to 360x200.
+    # 3: Resize image from 1720 x 730 -> 360 x 200.
     image = cv2.resize(image, (360, 200))
     assert image.shape == (200, 360, 3)
 
     # 4: BGR -> RGB.
     image = image[:, :, ::-1]
 
-    # 5: Convert to grayscale.
+    return image
+
+
+def _crop_image(image: np.ndarray):
+    assert image.shape == (200, 360, 3)
     image = Image.fromarray(image).convert("L")
 
     # 6: Crop out nose, sky, bottom of image.
@@ -121,12 +122,11 @@ def _crop_image(image_arr: np.ndarray):
     return image
 
 
-def _downsample_image(image: np.ndarray):
+def downsample_image(image: np.ndarray, stride: int = 16):
     assert image.shape == (128, 256)
     height_orig, width_orig = image.shape
 
-    stride = 16
-    num_pix = 16
+    num_pix = stride
     width = width_orig // stride
     height = height_orig // stride
 
@@ -137,9 +137,9 @@ def _downsample_image(image: np.ndarray):
     return out
 
 
-def _normalize_image(image: np.ndarray):
+def normalize_image(image: np.ndarray):
     """Normalize the image, then flattens it. Input: (8, 16). Output: (128,)."""
-    assert image.shape == (8, 16)
+    # assert image.shape == (8, 16)
     image -= image.mean()
     image += 0.5
     image[image > 1] = 1
@@ -147,13 +147,16 @@ def _normalize_image(image: np.ndarray):
     return image.flatten()
 
 
-def process_image(image: np.ndarray) -> np.ndarray:
+def process_image(image: np.ndarray, stride: int = 16) -> np.ndarray:
     """Process the image for use with TinyTaxiNet.
     Input: (1080, 1920, 4)
     Output: (128 = 8 * 16,)
     """
     assert image.shape == (1080, 1920, 4)
-    image = _normalize_image(_downsample_image(_crop_image(image)))
+    resized_image = _resize_image(image)
+    cropped_image = _crop_image(resized_image)
+
+    image = normalize_image(downsample_image(cropped_image, stride))
     image = image.clip(0, 1)
     assert image.shape == (128,)
     return image

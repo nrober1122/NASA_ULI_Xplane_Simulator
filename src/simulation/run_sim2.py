@@ -7,6 +7,7 @@ sys.path.append(xpc3_dir)
 
 import time
 from typing import Callable
+import pathlib
 
 import ipdb
 import matplotlib.pyplot as plt
@@ -23,14 +24,15 @@ from PIL import Image
 import xpc3
 import xpc3_helper
 
-
 def get_state(image_raw: np.ndarray, attack: Callable = None):
     # Process image before passing it to NN estimator
     image_processed = settings.PROCESS_IMG(image_raw)
 
     # Add adversarial attack if applicable
     if attack is not None:
-        image_processed += attack.get_patch(image_processed, 0.022)
+        linfnorm = 0.03
+        image_processed += attack.get_patch(image_processed, linfnorm)
+        image_processed = image_processed.clip(0, 1)
         # pil_img = Image.fromarray((attack.get_patch(image_processed).reshape((8,16)))*255+125)
         # pil_img = pil_img.convert("L")
         # pil_img.save(results_dir + 'mask.png')
@@ -114,9 +116,10 @@ def simulate_controller(
         T_image_raw.append(image_raw)
 
         cte, he, img = get_state(image_raw, attack=settings.ATTACK)
-        logger.info("CTE: {:.2f} ({:.2f}), HE: {:.2f} ({:.2f})".format(cte, cte_gt, he, he_gt))
         rudder = get_control(client, cte, he)
         client.sendCTRL([0, rudder, rudder, throttle])
+
+        logger.info("CTE: {: .2f} ({: .2f}), HE: {: .2f} ({: .2f}), RU: {: .2f}".format(cte, cte_gt, he, he_gt, rudder))
 
         cte_clean, he_clean, img_clean = get_state(image_raw)
         rudder_clean = get_control(client, cte_clean, he_clean)
@@ -144,6 +147,8 @@ def simulate_controller(
         now = startTime
 
     client.pauseSim(True)
+
+    pathlib.Path(results_dir).mkdir(exist_ok=True, parents=True)
 
     T_t = np.arange(len(T_state_gt)) * dt
 

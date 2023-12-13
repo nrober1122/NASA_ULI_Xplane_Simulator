@@ -17,6 +17,8 @@ from tiny_taxinet_train.tiny_taxinet_dataloader import tiny_taxinet_prepare_data
 NASA_ULI_ROOT_DIR = os.environ["NASA_ULI_ROOT_DIR"]
 DATA_DIR = os.environ["NASA_ULI_DATA_DIR"]
 
+# OBJECTIVE = "mse"
+OBJECTIVE = "lyap"
 
 class TinyTaxiNetAttackStatic(torch.nn.Module):
     def __init__(self, image_size: tuple[int, int], max_delta: float, rudder_target: float):
@@ -59,8 +61,15 @@ def train_model_atk(
                 b_rudder = get_p_control_torch(b_cte, b_he)
                 assert b_rudder.shape == (batch_size,)
 
-                # We want the rudder to be equal to the desired value.
-                loss_mse = torch.mean((b_rudder - model_atk.rudder_target) ** 2)
+                if OBJECTIVE == "mse":
+                    # We want the rudder to be equal to the desired value.
+                    loss_mse = torch.mean((b_rudder - model_atk.rudder_target) ** 2)
+                elif OBJECTIVE == "lyap":
+                    # We want to maximize (theta * omega) ~ (-theta * rudder).
+                    Vdot_approx = -torch.mean(b_he * b_rudder)
+                    loss_mse = -Vdot_approx
+                else:
+                    raise NotImplementedError("")
 
                 loss_mse.backward()
                 optimizer.step()
@@ -81,8 +90,17 @@ def train_model_atk(
                 b_rudder = get_p_control_torch(b_cte, b_he)
                 assert b_rudder.shape == (batch_size,)
 
-                # We want the rudder to be equal to the desired value.
-                loss_mse = torch.mean((b_rudder - model_atk.rudder_target) ** 2)
+                if OBJECTIVE == "mse":
+                    # We want the rudder to be equal to the desired value.
+                    loss_mse = torch.mean((b_rudder - model_atk.rudder_target) ** 2)
+                elif OBJECTIVE == "lyap":
+                    # We want to maximize (theta * omega) ~ (-theta * rudder).
+                    omega_target = 0.2 * torch.sign(b_he)
+                    rudder_target = -omega_target
+                    loss_mse = torch.mean((b_rudder - rudder_target) ** 2)
+                else:
+                    raise NotImplementedError("")
+
                 loss_mses_eval.append(loss_mse.item())
 
         # Log.
@@ -96,7 +114,7 @@ def train_model_atk(
 def main():
     scratch_dir = pathlib.Path(NASA_ULI_ROOT_DIR) / "scratch"
     models_dir = pathlib.Path(NASA_ULI_ROOT_DIR) / "models"
-    results_dir = scratch_dir / "tiny_taxinet_attack_static"
+    results_dir = scratch_dir / f"tiny_taxinet_attack_static_{OBJECTIVE}"
     results_dir.mkdir(exist_ok=True, parents=True)
 
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")

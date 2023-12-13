@@ -24,16 +24,17 @@ DUBINS = False
 #                      image observations of the true state
 # 'dnn'              - state is estimated using the resnet neural network from
 #                      image observations of the true state
-# STATE_ESTIMATOR = 'tiny_taxinet'
-STATE_ESTIMATOR = 'dnn'
+STATE_ESTIMATOR = 'tiny_taxinet'
+# STATE_ESTIMATOR = 'dnn'
 
 # Type of adversarial attack
 # None                  - No adversarial attack
 # static_atk.get_patch  - patch generated for tiny taxinet
 
 # ATTACK = None
-# ATTACK = static_atk
-ATTACK = static_atk_dnn
+ATTACK = static_atk.StaticAttack("static_rudder")
+# ATTACK = static_atk.StaticAttack("lyap")
+# ATTACK = static_atk_dnn
 
 # Time of day in local time, e.g. 8.0 = 8AM, 17.0 = 5PM
 TIME_OF_DAY = 8.0
