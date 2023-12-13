@@ -8,26 +8,14 @@ import ipdb
 import matplotlib.pyplot as plt
 import numpy as np
 from loguru import logger
+
+from simulation.sim_result import SimResult
 from xplane_screenshot import get_xplane_image
 
 import xpc3
 import xpc3_helper
 from simulation.static_atk import StaticAttack
 from simulation.tiny_taxinet2 import StateEstimator
-
-
-class SimResult(NamedTuple):
-    T_t: np.ndarray
-    T_state_gt: np.ndarray
-    T_state_clean: np.ndarray
-    T_state_est: np.ndarray
-
-    T_image_raw: np.ndarray
-    T_image_clean: np.ndarray
-    T_image_est: np.ndarray
-
-    def without_images(self):
-        return self._replace(T_image_raw=None, T_image_clean=None, T_image_est=None)
 
 
 def get_state(
