@@ -1,4 +1,5 @@
 import os
+import typer
 import pathlib
 import pickle
 
@@ -13,7 +14,7 @@ from simulation.controllers import getProportionalControl
 from simulation.static_atk import StaticAttack
 
 
-def run(client: xpc3.XPlaneConnect):
+def run(client: xpc3.XPlaneConnect, stride: int):
     # Time of day in local time, e.g. 8.0 = 8AM, 17.0 = 5PM
     TIME_OF_DAY = 8.0
 
@@ -27,7 +28,11 @@ def run(client: xpc3.XPlaneConnect):
     END_DTP = 522.0
 
     cfg = dict(
-        startCTE=START_CTE, startHE=START_HE, startDTP=START_DTP, endDTP=END_DTP, get_control=getProportionalControl
+        startCTE=START_CTE,
+        startHE=START_HE,
+        startDTP=START_DTP,
+        endDTP=END_DTP,
+        get_control=getProportionalControl,
     )
 
     # Set weather and time of day
@@ -35,31 +40,31 @@ def run(client: xpc3.XPlaneConnect):
     client.sendDREF("sim/weather/cloud_type[0]", CLOUD_COVER)
 
     #####################################################################
-    results_list = []
     linfnorms = np.linspace(0.0, 0.035, num=10)
-    for stride in [1, 2, 4, 8, 16]:
-        logger.info("Running for stride={}".format(stride))
-        attack = StaticAttack(stride=stride)
-        results_stride = []
 
-        for linfnorm in linfnorms:
-            data = simulate_controller(client, attack, linfnorm, **cfg)
-            results_stride.append(data)
+    logger.info("=====================")
+    logger.info("Running for stride={}".format(stride))
+    logger.info("=====================")
+    attack = StaticAttack(stride=stride)
+    results_stride = []
 
-        results_list = results_stride
+    for linfnorm in linfnorms:
+        logger.info("linfnorm: {}".format(linfnorm))
+        data = simulate_controller(client, attack, linfnorm, **cfg)
+        results_stride.append(data)
 
     # Save results.
-    results_pkl = pathlib.Path(os.environ["NASA_ULI_ROOT_DIR"]) / "scratch/stride_results/data.pkl"
+    results_pkl = pathlib.Path(os.environ["NASA_ULI_ROOT_DIR"]) / f"scratch/stride_results/data_{stride}.pkl"
     results_pkl.parent.mkdir(exist_ok=True, parents=True)
     with open(results_pkl, "wb") as f:
-        pickle.dump(results_list, f)
+        pickle.dump(results_stride, f)
 
 
-def main():
+def main(stride: int):
     with xpc3.XPlaneConnect() as client:
-        run(client)
+        run(client, stride)
 
 
 if __name__ == "__main__":
     with ipdb.launch_ipdb_on_exception():
-        main()
+        typer.run(main)

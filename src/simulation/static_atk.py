@@ -61,7 +61,7 @@ class StaticAttack:
         self._load_network()
         return self._network
 
-    def get_patch(self, image: np.ndarray, linfnorm: float = 0.027):
+    def get_patch(self, image: np.ndarray, linfnorm: float):
         self._load_network()
         n_image_feats = np.prod(self._network.patch.shape)
         assert image.shape == (n_image_feats,)

@@ -96,7 +96,7 @@ def simulate_controller(
         image_raw = get_xplane_image()
         T_image_raw.append(image_raw)
 
-        cte, he, img = get_state(image_raw, attack, linfnorm=linfnorm, should_attack=True)
+        cte, he, img = get_state(image_raw, attack, est_state, linfnorm=linfnorm, should_attack=True)
         rudder = get_control(client, cte, he)
         client.sendCTRL([0, rudder, rudder, throttle])
 
