@@ -21,7 +21,8 @@ def main():
     patches = []
     for stride in S_strides:
         attack = StaticAttack(stride=stride)
-        patch = attack._network.patch.detach().cpu().numpy()
+        nn = attack.get_network()
+        patch = nn.patch.detach().cpu().numpy()
         patches.append(patch)
 
     delta = 0.03
