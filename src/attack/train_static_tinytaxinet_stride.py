@@ -10,10 +10,9 @@ from matplotlib.colors import CenteredNorm
 from torch.utils.data import DataLoader
 
 from simulation.controllers import get_p_control_torch, getProportionalControl
-from simulation.tiny_taxinet2 import get_network, get_stride_network
+from simulation.tiny_taxinet2 import get_stride_network
 from tiny_taxinet_train.model_tiny_taxinet import TinyTaxiNetDNN
-from tiny_taxinet_train.tiny_taxinet_dataloader import tiny_taxinet_prepare_dataloader
-from tiny_taxinet_train.train_tiny_taxinet_strides import get_dataloader
+from tiny_taxinet_train.tiny_taxinet_dataloader import get_dataloader
 
 NASA_ULI_ROOT_DIR = os.environ["NASA_ULI_ROOT_DIR"]
 DATA_DIR = os.environ["NASA_ULI_DATA_DIR"]
@@ -115,7 +114,11 @@ def train_model_atk(
 
 def main():
     # [1, 2, 4, 8]
-    stride = 8
+    # stride = 8
+    # stride = 4
+    # stride = 2
+    stride = 1
+    logger.info("USING STRIDE {}".format(stride))
 
     scratch_dir = pathlib.Path(NASA_ULI_ROOT_DIR) / "scratch"
     models_dir = pathlib.Path(NASA_ULI_ROOT_DIR) / "models"
@@ -139,7 +142,8 @@ def main():
     # Create the attack model.
     # image_size = (8, 16)
     image_size = (height, width)
-    max_delta = 0.027
+    # max_delta = 0.027
+    max_delta = 0.03
     rudder_target = 1.0
     model_atk = TinyTaxiNetAttackStatic(image_size, max_delta, rudder_target)
     model_atk.to(device)

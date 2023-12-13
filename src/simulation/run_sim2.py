@@ -1,13 +1,15 @@
 import os
 import sys
 
+from simulation.static_atk import StaticAttack
+
 xpc3_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/src/"
 results_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/scratch/results/"
 sys.path.append(xpc3_dir)
 
+import pathlib
 import time
 from typing import Callable
-import pathlib
 
 import ipdb
 import matplotlib.pyplot as plt
@@ -17,19 +19,20 @@ import settings
 # import tiny_taxinet
 # import tiny_taxinet2
 from loguru import logger
+from PIL import Image
 # from tiny_taxinet import process_image
 from xplane_screenshot import get_xplane_image
-from PIL import Image
 
 import xpc3
 import xpc3_helper
 
-def get_state(image_raw: np.ndarray, attack: Callable = None):
+
+def get_state(image_raw: np.ndarray, attack: StaticAttack, should_attack: bool = True):
     # Process image before passing it to NN estimator
-    image_processed = settings.PROCESS_IMG(image_raw)
+    image_processed = attack.process_image(image_raw)
 
     # Add adversarial attack if applicable
-    if attack is not None:
+    if should_attack:
         linfnorm = 0.03
         image_processed += attack.get_patch(image_processed, linfnorm)
         image_processed = image_processed.clip(0, 1)
@@ -115,13 +118,13 @@ def simulate_controller(
         image_raw = get_xplane_image()
         T_image_raw.append(image_raw)
 
-        cte, he, img = get_state(image_raw, attack=settings.ATTACK)
+        cte, he, img = get_state(image_raw, attack=settings.ATTACK, should_attack=True)
         rudder = get_control(client, cte, he)
         client.sendCTRL([0, rudder, rudder, throttle])
 
         logger.info("CTE: {: .2f} ({: .2f}), HE: {: .2f} ({: .2f}), RU: {: .2f}".format(cte, cte_gt, he, he_gt, rudder))
 
-        cte_clean, he_clean, img_clean = get_state(image_raw)
+        cte_clean, he_clean, img_clean = get_state(image_raw, attack=settings.ATTACK, should_attack=False)
         rudder_clean = get_control(client, cte_clean, he_clean)
         T_rudder_clean.append(rudder_clean)
         T_rudder.append(rudder)

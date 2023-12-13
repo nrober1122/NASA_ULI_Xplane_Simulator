@@ -10,15 +10,15 @@ from matplotlib.colors import CenteredNorm
 from torch.utils.data import DataLoader
 
 from simulation.controllers import get_p_control_torch, getProportionalControl
-from simulation.tiny_taxinet2 import get_network
+from simulation.tiny_taxinet2 import StateEstimator
 from tiny_taxinet_train.model_tiny_taxinet import TinyTaxiNetDNN
 from tiny_taxinet_train.tiny_taxinet_dataloader import tiny_taxinet_prepare_dataloader
 
 NASA_ULI_ROOT_DIR = os.environ["NASA_ULI_ROOT_DIR"]
 DATA_DIR = os.environ["NASA_ULI_DATA_DIR"]
 
-# OBJECTIVE = "mse"
-OBJECTIVE = "lyap"
+OBJECTIVE = "mse"
+# OBJECTIVE = "lyap"
 
 class TinyTaxiNetAttackStatic(torch.nn.Module):
     def __init__(self, image_size: tuple[int, int], max_delta: float, rudder_target: float):
@@ -120,7 +120,7 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     dl_params = {"batch_size": 256, "shuffle": True, "num_workers": 1, "drop_last": False, "pin_memory": True}
 
-    model = get_network()
+    model = StateEstimator().get_network()
     model.eval()
     model.to(device)
 
@@ -130,7 +130,8 @@ def main():
 
     # Create the attack model.
     image_size = (8, 16)
-    max_delta = 0.027
+    # max_delta = 0.027
+    max_delta = 0.03
     rudder_target = 1.0
     model_atk = TinyTaxiNetAttackStatic(image_size, max_delta, rudder_target)
     model_atk.to(device)

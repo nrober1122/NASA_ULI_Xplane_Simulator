@@ -158,7 +158,12 @@ def process_image(image: np.ndarray, stride: int = 16) -> np.ndarray:
 
     image = normalize_image(downsample_image(cropped_image, stride))
     image = image.clip(0, 1)
-    assert image.shape == (128,)
+
+    height_orig, width_orig = cropped_image.shape
+    width = width_orig // stride
+    height = height_orig // stride
+
+    assert image.shape == (width * height,)
     return image
 
 

@@ -1,4 +1,5 @@
 import os
+import pathlib
 import sys
 
 import h5py
@@ -8,6 +9,7 @@ import numpy as np
 import pandas
 import torch
 import torchvision
+from loguru import logger
 
 # make sure this is a system variable in your bashrc
 NASA_ULI_ROOT_DIR = os.environ["NASA_ULI_ROOT_DIR"]
@@ -25,6 +27,27 @@ UTILS_DIR = NASA_ULI_ROOT_DIR + "/src/utils/"
 sys.path.append(UTILS_DIR)
 
 from textfile_utils import *
+
+
+def get_dataloader(
+    data_dir: pathlib.Path, stride: int, tts_name: str, dataloader_params
+) -> tuple[TensorDataset, DataLoader]:
+    label_file = data_dir / f"morning_downsampled_stride{stride}/morning_{tts_name}_stride{stride}.h5"
+    f = h5py.File(label_file, "r")
+
+    num_y = 2
+    x_train = f["X_train"][()].astype(np.float32)
+    y_train = f["y_train"][()].astype(np.float32)[:, 0:num_y]
+
+    tensor_dataset = TensorDataset(torch.tensor(x_train), torch.tensor(y_train))
+
+    logger.info("Dataset size: {}".format(len(tensor_dataset)))
+    logger.info("ymin: {}".format(tensor_dataset[:][1][:, 0].min()))
+    logger.info("ymax: {}".format(tensor_dataset[:][1][:, 0].max()))
+    logger.info("ymin: {}".format(tensor_dataset[:][1][:, 1].min()))
+    logger.info("ymax: {}".format(tensor_dataset[:][1][:, 1].max()))
+    tensor_dataloader = DataLoader(tensor_dataset, **dataloader_params)
+    return tensor_dataset, tensor_dataloader
 
 
 def tiny_taxinet_prepare_dataloader(
@@ -52,7 +75,6 @@ def tiny_taxinet_prepare_dataloader(
         # get the training data, plot a few random images
         x_train = f["X_train"][()].astype(np.float32)
         y_train = f["y_train"][()].astype(np.float32)
-        ipdb.set_trace()
         y_train = y_train[:, 0:num_y]
 
         if print_mode:

@@ -32,8 +32,9 @@ STATE_ESTIMATOR = 'tiny_taxinet'
 # static_atk.get_patch  - patch generated for tiny taxinet
 
 # ATTACK = None
-ATTACK = static_atk.StaticAttack("static_rudder")
+# ATTACK = static_atk.StaticAttack("static_rudder")
 # ATTACK = static_atk.StaticAttack("lyap")
+ATTACK = static_atk.StaticAttack(stride=8)
 # ATTACK = static_atk_dnn
 
 # Time of day in local time, e.g. 8.0 = 8AM, 17.0 = 5PM
@@ -81,7 +82,7 @@ else:
 # Tells simulator which function to use to estimate the state
 if STATE_ESTIMATOR == 'tiny_taxinet':
     PROCESS_IMG = tiny_taxinet.process_image
-    GET_STATE = tiny_taxinet2.evaluate_network
+    GET_STATE = tiny_taxinet2.StateEstimator(stride=ATTACK.stride)
 elif STATE_ESTIMATOR == 'fully_observable':
     GET_STATE = fully_observable.getStateFullyObservable
 elif STATE_ESTIMATOR == 'dnn':
