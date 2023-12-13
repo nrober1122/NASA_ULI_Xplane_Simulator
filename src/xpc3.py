@@ -313,6 +313,10 @@ class XPlaneConnect(object):
         # Send
         self.sendUDP(buffer)
 
+    def reset_failures(self):
+        buffer = struct.pack("<4sx", b"RESE")
+        self.sendUDP(buffer)
+
     def getDREF(self, dref):
         """Gets the value of an X-Plane dataref.
 

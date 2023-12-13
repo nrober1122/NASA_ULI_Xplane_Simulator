@@ -31,7 +31,7 @@ class StaticAttack:
         scratch_dir = NASA_ULI_ROOT_DIR / "scratch"
 
         if self._stride is None:
-            if self.name == "static_rudder":
+            if self.name == "static_rudder" or self.name is None:
                 # return models_dir / "tiny_taxinet_attack_static/model_atk.pt"
                 return scratch_dir / "tiny_taxinet_attack_static_mse/model_atk.pt"
             if self.name == "lyap":
@@ -76,4 +76,4 @@ class StaticAttack:
             return atk
 
     def process_image(self, image: np.ndarray):
-        return process_image(image, stride=self._stride)
+        return process_image(image, stride=self.stride)

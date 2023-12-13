@@ -26,6 +26,9 @@ class SimResult(NamedTuple):
     T_image_clean: np.ndarray
     T_image_est: np.ndarray
 
+    def without_images(self):
+        return self._replace(T_image_raw=None, T_image_clean=None, T_image_est=None)
+
 
 def get_state(
     image_raw: np.ndarray, attack: StaticAttack, est_state, linfnorm: float = None, should_attack: bool = True

@@ -1,10 +1,11 @@
 import os
-import typer
 import pathlib
 import pickle
+import time
 
 import ipdb
 import numpy as np
+import typer
 from loguru import logger
 from run_sim_lib import simulate_controller
 
@@ -35,10 +36,6 @@ def run(client: xpc3.XPlaneConnect, stride: int):
         get_control=getProportionalControl,
     )
 
-    # Set weather and time of day
-    client.sendDREF("sim/time/zulu_time_sec", TIME_OF_DAY * 3600 + 8 * 3600)
-    client.sendDREF("sim/weather/cloud_type[0]", CLOUD_COVER)
-
     #####################################################################
     linfnorms = np.linspace(0.0, 0.035, num=10)
 
@@ -50,14 +47,27 @@ def run(client: xpc3.XPlaneConnect, stride: int):
 
     for linfnorm in linfnorms:
         logger.info("linfnorm: {}".format(linfnorm))
+        # Set weather and time of day
+        client.sendDREF("sim/time/zulu_time_sec", TIME_OF_DAY * 3600 + 8 * 3600)
+        client.sendDREF("sim/weather/cloud_type[0]", CLOUD_COVER)
+        # logger.info("Waiting for reset...")
+        # client.pauseSim(False)
+        # client.sendDREF("sim/operation/reset_flight", 1)
+        # time.sleep(2)
+        # logger.info("Waiting for reset... reset done?")
+
         data = simulate_controller(client, attack, linfnorm, **cfg)
-        results_stride.append(data)
+        # Remove the images.
+        results_stride.append(data.without_images())
 
     # Save results.
     results_pkl = pathlib.Path(os.environ["NASA_ULI_ROOT_DIR"]) / f"scratch/stride_results/data_{stride}.pkl"
     results_pkl.parent.mkdir(exist_ok=True, parents=True)
+
+    logger.info("Saving to {}...".format(results_pkl))
     with open(results_pkl, "wb") as f:
         pickle.dump(results_stride, f)
+    logger.info("Saving to {}... done!".format(results_pkl))
 
 
 def main(stride: int):

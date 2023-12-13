@@ -218,8 +218,9 @@ def reset(client, cteInit=0, heInit=0, dtpInit=0, noBrake=True):
     # Setting position with lat/lon gets you within 0.3m. Setting local_x, local_z is more accurate)
     setHomeState(client, cteInit, dtpInit, heInit)
 
-    # Fix the plane if you "crashed" or broke something
-    client.sendDREFs(["sim/operation/fix_all_systems"], [1])
+    # # Fix the plane if you "crashed" or broke something
+    # client.sendDREFs(["sim/operation/fix_all_systems"], [1])
+    client.reset_failures()
 
     # Set fuel mixture for engine
     client.sendDREF("sim/flightmodel/engine/ENGN_mixt", 0.61)
