@@ -1,15 +1,6 @@
-import time
-
-import cv2
-import einops as ei
-import ipdb
-import numpy as np
-import Xlib.display
 import Xlib.X as X
-from loguru import logger
-from PIL import Image
-from tiny_taxinet import getCurrentImage
-
+import Xlib.display
+import numpy as np
 
 def get_xplane_image() -> np.ndarray:
     """ Returns an image of the current X-Plane 11 window. (1080, 1920, 4).

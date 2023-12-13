@@ -36,6 +36,9 @@ def run(client: xpc3.XPlaneConnect, stride: int):
         get_control=getProportionalControl,
     )
 
+    with_images = False
+    logger.info("with_images: {}".format(with_images))
+
     #####################################################################
     linfnorms = np.linspace(0.0, 0.035, num=10)
 
@@ -45,7 +48,7 @@ def run(client: xpc3.XPlaneConnect, stride: int):
     attack = StaticAttack(stride=stride)
     results_stride = []
 
-    for linfnorm in linfnorms:
+    for linfnorm in linfnorms[:5]:
         logger.info("linfnorm: {}".format(linfnorm))
         # Set weather and time of day
         client.sendDREF("sim/time/zulu_time_sec", TIME_OF_DAY * 3600 + 8 * 3600)
@@ -57,11 +60,17 @@ def run(client: xpc3.XPlaneConnect, stride: int):
         # logger.info("Waiting for reset... reset done?")
 
         data = simulate_controller(client, attack, linfnorm, **cfg)
-        # Remove the images.
-        results_stride.append(data.without_images())
+
+        if not with_images:
+            # Remove the images.
+            data = data.without_images()
+        results_stride.append(data)
 
     # Save results.
-    results_pkl = pathlib.Path(os.environ["NASA_ULI_ROOT_DIR"]) / f"scratch/stride_results/data_{stride}.pkl"
+    if with_images:
+        results_pkl = pathlib.Path(os.environ["NASA_ULI_ROOT_DIR"]) / f"scratch/stride_results/data_{stride}_im.pkl"
+    else:
+        results_pkl = pathlib.Path(os.environ["NASA_ULI_ROOT_DIR"]) / f"scratch/stride_results/data_{stride}.pkl"
     results_pkl.parent.mkdir(exist_ok=True, parents=True)
 
     logger.info("Saving to {}...".format(results_pkl))
