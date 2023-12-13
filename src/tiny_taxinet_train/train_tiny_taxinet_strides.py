@@ -28,6 +28,7 @@ def train_model(
     loss_func,
     optimizer,
     device,
+    results_dir,
     num_epochs=25,
     log_every=100,
 ):
@@ -131,6 +132,8 @@ def train_model(
                     best_loss = epoch_loss
                     best_model_wts = copy.deepcopy(model.state_dict())
 
+                    torch.save(model.state_dict(), results_dir + "/best_model.pt")
+
             pbar.update(1)
             pbar.set_description("loss tr: {:6.2e}, val: {:6.2e}".format(tr_loss, val_loss))
 
@@ -190,6 +193,7 @@ def main():
         loss_func,
         optimizer,
         device,
+        results_dir,
         num_epochs=train_options["epochs"],
         log_every=100,
     )
