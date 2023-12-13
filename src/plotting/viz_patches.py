@@ -32,7 +32,7 @@ def main():
     fig, axes = plt.subplots(1, S, figsize=figsize, layout="constrained", dpi=300)
     for ii, ax in enumerate(axes):
         im = ax.imshow(patches[ii], cmap="RdBu_r", norm=norm)
-        ax.set_title("Downsample factor {}".format(S_strides[ii]))
+        ax.set_title("Downsample {}x".format(S_strides[ii]), fontsize=8)
     fig.colorbar(im, ax=ax)
     [ax.axis("off") for ax in axes]
     [ax.grid(False) for ax in axes]
