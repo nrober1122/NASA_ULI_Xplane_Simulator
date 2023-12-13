@@ -18,7 +18,7 @@ def _load_network():
 
     NASA_ULI_ROOT_DIR = pathlib.Path(os.environ["NASA_ULI_ROOT_DIR"])
     scratch_dir = NASA_ULI_ROOT_DIR / "scratch"
-    model_path = scratch_dir / "tiny_taxinet_DNN_train/morning/best_model.pt"
+    model_path = NASA_ULI_ROOT_DIR / "models/tiny_taxinet_pytorch/morning/best_model.pt"
     assert model_path.exists()
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

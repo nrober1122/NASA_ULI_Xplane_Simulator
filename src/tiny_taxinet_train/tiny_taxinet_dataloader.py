@@ -2,6 +2,7 @@ import os
 import sys
 
 import h5py
+import ipdb
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas
@@ -11,7 +12,7 @@ import torchvision
 # make sure this is a system variable in your bashrc
 NASA_ULI_ROOT_DIR = os.environ["NASA_ULI_ROOT_DIR"]
 
-DATA_DIR = os.environ["NASA_DATA_DIR"]
+DATA_DIR = os.environ["NASA_ULI_DATA_DIR"]
 
 from torch.utils.data import DataLoader, TensorDataset
 from torchvision import transforms
@@ -50,7 +51,9 @@ def tiny_taxinet_prepare_dataloader(
         f = h5py.File(label_file, "r")
         # get the training data, plot a few random images
         x_train = f["X_train"][()].astype(np.float32)
-        y_train = f["y_train"][()].astype(np.float32)[:, 0:num_y]
+        y_train = f["y_train"][()].astype(np.float32)
+        ipdb.set_trace()
+        y_train = y_train[:, 0:num_y]
 
         if print_mode:
             print(" ")
