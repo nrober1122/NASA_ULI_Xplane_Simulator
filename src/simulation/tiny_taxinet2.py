@@ -4,10 +4,13 @@ from typing import Optional
 
 import numpy as np
 import torch
+from loguru import logger
 
 from tiny_taxinet_train.model_tiny_taxinet import TinyTaxiNetDNN
 
 NASA_ULI_ROOT_DIR = pathlib.Path(os.environ["NASA_ULI_ROOT_DIR"])
+
+_cache = {}
 
 
 class StateEstimator:
@@ -33,6 +36,11 @@ class StateEstimator:
 
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+        global _cache
+        if self.stride in _cache:
+            logger.info(f"Loading stride {self.stride} from cache!")
+            self._network = _cache[self.stride].to(device)
+
         width = 256 // self.stride
         height = 128 // self.stride
         n_features_in = width * height
@@ -40,6 +48,9 @@ class StateEstimator:
         self._network = TinyTaxiNetDNN(n_features_in=n_features_in)
         self._network.load_state_dict(torch.load(model_path, map_location=device))
         self._network.eval()
+
+        if self.stride not in _cache:
+            _cache[self.stride] = self._network.cpu()
 
     def get_network(self):
         self._load_network()

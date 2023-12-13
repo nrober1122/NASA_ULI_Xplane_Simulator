@@ -1,28 +1,35 @@
 import os
-import sys
-
-from simulation.static_atk import StaticAttack
-
-xpc3_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/src/"
-results_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/scratch/results/"
-sys.path.append(xpc3_dir)
-
 import pathlib
+import sys
 import time
-from typing import Callable
+from typing import Callable, NamedTuple
 
 import ipdb
 import matplotlib.pyplot as plt
 import numpy as np
-import settings
 from loguru import logger
 from xplane_screenshot import get_xplane_image
 
 import xpc3
 import xpc3_helper
+from simulation.static_atk import StaticAttack
+from simulation.tiny_taxinet2 import StateEstimator
 
 
-def get_state(image_raw: np.ndarray, attack: StaticAttack, linfnorm: float = None, should_attack: bool = True):
+class SimResult(NamedTuple):
+    T_t: np.ndarray
+    T_state_gt: np.ndarray
+    T_state_clean: np.ndarray
+    T_state_est: np.ndarray
+
+    T_image_raw: np.ndarray
+    T_image_clean: np.ndarray
+    T_image_est: np.ndarray
+
+
+def get_state(
+    image_raw: np.ndarray, attack: StaticAttack, est_state, linfnorm: float = None, should_attack: bool = True
+):
     # Process image before passing it to NN estimator
     image_processed = attack.process_image(image_raw)
 
@@ -30,54 +37,31 @@ def get_state(image_raw: np.ndarray, attack: StaticAttack, linfnorm: float = Non
     if should_attack:
         image_processed += attack.get_patch(image_processed, linfnorm)
         image_processed = image_processed.clip(0, 1)
-        # pil_img = Image.fromarray((attack.get_patch(image_processed).reshape((8,16)))*255+125)
-        # pil_img = pil_img.convert("L")
-        # pil_img.save(results_dir + 'mask.png')
-
-        # pil2 = Image.fromarray((attack.get_patch(image_processed, 0.022).transpose([1, 2, 0]) * 225).astype(np.uint8))
-        # pil2.save(results_dir + 'dnn_mask.png')
-
-        # import pdb; pdb.set_trace()
 
     # Estimate state from processed image
-    cte, he = settings.GET_STATE(image_processed)
+    cte, he = est_state(image_processed)
 
     return cte, he, image_processed
 
 
-def main():
-    with xpc3.XPlaneConnect() as client:
-        # Set weather and time of day
-        client.sendDREF("sim/time/zulu_time_sec", settings.TIME_OF_DAY * 3600 + 8 * 3600)
-        client.sendDREF("sim/weather/cloud_type[0]", settings.CLOUD_COVER)
-
-        simulate_controller(
-            client,
-            settings.START_CTE,
-            settings.START_HE,
-            settings.START_DTP,
-            settings.END_DTP,
-            get_state,
-            settings.GET_CONTROL,
-        )
-
-
 def simulate_controller(
     client: xpc3.XPlaneConnect,
+    attack: StaticAttack,
+    linfnorm: float,
     startCTE: float,
     startHE: float,
     startDTP: float,
     endDTP: float,
-    get_state: Callable,
     get_control: Callable,
+    dt: float = 0.1,
     sim_speed: float = 1.0,
-):
+) -> SimResult:
     client.pauseSim(True)
 
     client.sendDREF("sim/time/sim_speed", sim_speed)
     xpc3_helper.reset(client, cteInit=startCTE, heInit=startHE, dtpInit=startDTP)
     xpc3_helper.sendBrake(client, 0)
-
+    time.sleep(0.05)
     client.pauseSim(False)
 
     dtp = startDTP
@@ -94,7 +78,7 @@ def simulate_controller(
 
     cte_gt, dtp_gt, he_gt = xpc3_helper.getHomeState(client)
 
-    dt = settings.DT
+    est_state = StateEstimator(stride=attack.stride)
 
     while dtp < endDTP and now < run_end_time and np.abs(cte_gt) < 10.5:
         speed = xpc3_helper.getSpeed(client)
@@ -112,14 +96,13 @@ def simulate_controller(
         image_raw = get_xplane_image()
         T_image_raw.append(image_raw)
 
-        linfnorm = 0.03
-        cte, he, img = get_state(image_raw, attack=settings.ATTACK, linfnorm=linfnorm, should_attack=True)
+        cte, he, img = get_state(image_raw, attack, linfnorm=linfnorm, should_attack=True)
         rudder = get_control(client, cte, he)
         client.sendCTRL([0, rudder, rudder, throttle])
 
         logger.info("CTE: {: .2f} ({: .2f}), HE: {: .2f} ({: .2f}), RU: {: .2f}".format(cte, cte_gt, he, he_gt, rudder))
 
-        cte_clean, he_clean, img_clean = get_state(image_raw, attack=settings.ATTACK, should_attack=False)
+        cte_clean, he_clean, img_clean = get_state(image_raw, attack, est_state, should_attack=False)
         rudder_clean = get_control(client, cte_clean, he_clean)
         T_rudder_clean.append(rudder_clean)
         T_rudder.append(rudder)
@@ -146,8 +129,6 @@ def simulate_controller(
 
     client.pauseSim(True)
 
-    pathlib.Path(results_dir).mkdir(exist_ok=True, parents=True)
-
     T_t = np.arange(len(T_state_gt)) * dt
 
     T_state_gt = np.stack(T_state_gt, axis=0)
@@ -158,45 +139,4 @@ def simulate_controller(
     T_image_clean = np.stack(T_image_clean, axis=0)
     T_image_est = np.stack(T_image_est, axis=0)
 
-    labels = ["CTE (m)", "DTP (m)", "HE (degrees)"]
-    # Plot.
-    fig, axes = plt.subplots(3, layout="constrained")
-    for ii, ax in enumerate(axes):
-        ax.plot(T_t, T_state_gt[:, ii], color="C4", label="True")
-        ax.plot(T_t, T_state_est[:, ii], color="C1", label="Estimated")
-        ax.set_ylabel(labels[ii], rotation=0, ha="right")
-    axes[0].legend()
-    fig.savefig(results_dir + "sim2_traj.pdf")
-    plt.close(fig)
-    ###############################################3
-    # x axis = DTP, y axis = CTE.
-    cte_constr = 10.0
-    ylim = 11.0
-    fig, ax = plt.subplots(layout="constrained")
-    ax.plot(T_state_gt[:, 1], T_state_gt[:, 0], marker="o", lw=0.5, color="C1")
-    ax.set_aspect("equal")
-    ymin, ymax = ax.get_ylim()
-    ymin, ymax = min(ymin, -ylim), max(ymax, ylim)
-    ax.set_ylim(ymin, ymax)
-    ax.axhspan(cte_constr, ymax, color="C0", alpha=0.2)
-    ax.axhspan(-cte_constr, ymin, color="C0", alpha=0.2)
-    fig.savefig(results_dir + "sim2_plot2d.pdf")
-    plt.close(fig)
-
-    # Save the data.
-    np.savez(
-        results_dir + "sim2_data.npz",
-        T_state_gt=T_state_gt,
-        T_state_clean=T_state_clean,
-        T_state_est=T_state_est,
-        T_image_raw=T_image_raw,
-        T_image_clean=T_image_clean,
-        T_image_est=T_image_est,
-        T_rudder_clean=T_rudder_clean,
-        T_rudder=T_rudder,
-    )
-
-
-if __name__ == "__main__":
-    with ipdb.launch_ipdb_on_exception():
-        main()
+    return SimResult(T_t, T_state_gt, T_state_clean, T_state_est, T_image_raw, T_image_clean, T_image_est)
