@@ -153,13 +153,15 @@ def main():
 
     # [1, 2, 4, 8]
     # stride = 8
-    stride = 4
+    # stride = 4
+    stride = 1
 
     train_options = {
         "epochs": 2_000,
         "learning_rate": 1e-3,
     }
-    dataloader_params = {"batch_size": 256, "shuffle": True, "num_workers": 1, "drop_last": False, "pin_memory": True}
+    # dataloader_params = {"batch_size": 512, "shuffle": True, "num_workers": 1, "drop_last": False, "pin_memory": True}
+    dataloader_params = {"batch_size": 2048, "shuffle": True, "num_workers": 1, "drop_last": False, "pin_memory": True}
 
     width = 256 // stride
     height = 128 // stride
