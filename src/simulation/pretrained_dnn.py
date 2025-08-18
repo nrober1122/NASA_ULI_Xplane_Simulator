@@ -1,38 +1,27 @@
 import os
 import time
+from typing import Optional
+import yaml
 
 import cv2
 import mss
 import numpy as np
 import torch
+import jax
 from nnet import *
 from PIL import Image
 from torchvision import transforms
 
+from utils.torch2jax import torch2jax
+
 from train_DNN.model_taxinet import TaxiNetDNN
 
-# Read in the network
-NASA_ULI_ROOT_DIR=os.environ['NASA_ULI_ROOT_DIR']
-model_dir = NASA_ULI_ROOT_DIR + '/models/pretrained_DNN_nick/'
-debug_dir = NASA_ULI_ROOT_DIR + '/scratch/debug/'
-# filename = "../../models/TinyTaxiNet.nnet"
-# network = NNet(filename)
+_network: Optional[TaxiNetDNN] = None
 
-torch.cuda.empty_cache()
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-print('found device: ', device)
+with open("config.yaml", "r") as f:
+    config = yaml.safe_load(f)
 
-model = TaxiNetDNN()
-
-# load the pre-trained model
-if device.type == 'cpu':
-    model.load_state_dict(torch.load(model_dir + '/best_model.pt', map_location=torch.device('cpu')))
-else:
-    model.load_state_dict(torch.load(model_dir + '/best_model.pt'))
-
-model = model.to(device)
-model.eval()
-
+USING_TORCH = config["USING_TORCH"]
 
 ### IMPORTANT PARAMETERS FOR IMAGE PROCESSING ###
 width = 224    # Width of image
@@ -42,6 +31,48 @@ screenShot = mss.mss()
 monitor = {'top': 100, 'left': 100, 'width': 1720, 'height': 960}
 screen_width = 360  # For cropping
 screen_height = 200  # For cropping
+
+device = torch.device("cpu")
+print('found device: ', device)
+
+
+def _load_network():
+    global _network
+
+    if _network is not None:
+        return _network
+    
+    torch.cuda.empty_cache()
+    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
+    print('found device: ', device)
+
+    _network = TaxiNetDNN()
+
+    # Read in the network
+    NASA_ULI_ROOT_DIR = os.environ['NASA_ULI_ROOT_DIR']
+    model_dir = NASA_ULI_ROOT_DIR + '/models/pretrained_DNN_nick/'
+
+    # load the pre-trained model
+    if USING_TORCH:
+        if device.type == 'cpu':
+            _network.load_state_dict(torch.load(model_dir + '/best_model.pt', map_location=torch.device('cpu')))
+        else:
+            _network.load_state_dict(torch.load(model_dir + '/best_model.pt'))
+
+        _network = _network.to(device)
+        _network.eval()
+    else:
+        _network.load_state_dict(torch.load(model_dir + '/best_model.pt', map_location=torch.device('cpu')))
+        # import ipdb; ipdb.set_trace()
+        jax.config.update("jax_platform_name", "cpu")
+        _network = torch2jax(_network)
+
+
+def get_network():
+    _load_network()
+    _network.model.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+    return _network
 
 
 def _crop_image(image_arr: np.ndarray):
@@ -96,11 +127,27 @@ def evaluate_network(image: np.ndarray):
     """Evaluate the network on the preprocessed image.
     Image: (128 = 8 * 16,)
     """
+    _load_network()
     assert image.shape == (3, width, height)
 
     image = image.reshape(1, 3, width, height)
-    pred = model(image.to(device))
-    pred = pred.cpu().detach().numpy().flatten()
+    # print(torch.version.cuda)        # Should match your installed CUDA toolkit
+    # print(torch.backends.cudnn.version())  # Should be a valid cuDNN version
+    # print(torch.cuda.is_available())       # Should be True
+
+    if USING_TORCH:
+        image = image.to(device)
+    else:
+        # Convert to JAX
+        image = image.detach().cpu().numpy()
+        image = jax.numpy.array(image)
+
+    pred = _network(image)
+
+    if USING_TORCH:
+        pred = pred.cpu().detach().numpy().flatten()
+    else:
+        pred = jax.device_get(pred).squeeze()
 
     # return scaled output
     return pred[0]*10, pred[1]*30

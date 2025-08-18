@@ -1,14 +1,18 @@
 import os
 import sys
+from datetime import datetime
 
 xpc3_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/src/"
-results_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/scratch/results/"
+results_dir = os.environ["NASA_ULI_DATA_DIR"] + "/LOG_" + datetime.now().strftime("%Y%m%d_%H_%M_%S") + "/"
+os.makedirs(results_dir, exist_ok=True)
+
 sys.path.append(xpc3_dir)
 
 import time
 from typing import Callable
 
 import ipdb
+import time
 import matplotlib.pyplot as plt
 import numpy as np
 import settings
@@ -19,9 +23,22 @@ from loguru import logger
 # from tiny_taxinet import process_image
 from xplane_screenshot import get_xplane_image
 from PIL import Image
+import jax.numpy as jnp
+import jax
 
 import xpc3
 import xpc3_helper
+
+from utils.torch2jax import torch2jax
+import hj_reachability as hj
+from hjnnv import hjnnvUncertaintyAwareFilter
+import dynamic_models
+import tiny_taxinet2
+import json
+
+import matplotlib.pyplot as plt
+
+jax.config.update('jax_platform_name', 'cpu')
 
 
 def get_state(image_raw: np.ndarray, attack: Callable = None):
@@ -30,7 +47,8 @@ def get_state(image_raw: np.ndarray, attack: Callable = None):
 
     # Add adversarial attack if applicable
     if attack is not None:
-        image_processed += attack.get_patch(image_processed, 0.022)
+        # image_processed += attack.get_patch(image_processed, 0.032)
+        image_processed += attack.get_patch(image_processed, settings.ATTACK_STRENGTH)
         # pil_img = Image.fromarray((attack.get_patch(image_processed).reshape((8,16)))*255+125)
         # pil_img = pil_img.convert("L")
         # pil_img.save(results_dir + 'mask.png')
@@ -52,15 +70,28 @@ def main():
         client.sendDREF("sim/time/zulu_time_sec", settings.TIME_OF_DAY * 3600 + 8 * 3600)
         client.sendDREF("sim/weather/cloud_type[0]", settings.CLOUD_COVER)
 
-        simulate_controller(
-            client,
-            settings.START_CTE,
-            settings.START_HE,
-            settings.START_DTP,
-            settings.END_DTP,
-            get_state,
-            settings.GET_CONTROL,
-        )
+        if settings.DUBINS:
+            simulate_controller_dubins(
+                client,
+                settings.START_CTE,
+                settings.START_HE,
+                settings.START_DTP,
+                settings.END_DTP,
+                get_state,
+                settings.GET_CONTROL,
+                settings.DT,
+                settings.CTRL_EVERY,
+            )
+        else:
+            simulate_controller(
+                client,
+                settings.START_CTE,
+                settings.START_HE,
+                settings.START_DTP,
+                settings.END_DTP,
+                get_state,
+                settings.GET_CONTROL,
+            )
 
 
 def simulate_controller(
@@ -78,6 +109,32 @@ def simulate_controller(
     client.sendDREF("sim/time/sim_speed", sim_speed)
     xpc3_helper.reset(client, cteInit=startCTE, heInit=startHE, dtpInit=startDTP)
     xpc3_helper.sendBrake(client, 0)
+
+    grid = hj.Grid.from_lattice_parameters_and_boundary_conditions(
+        hj.sets.Box(
+            np.array([-15., -np.pi/4]),
+            np.array([15., np.pi/4])),
+        (100, 100),
+    )
+
+    # Set up the uncertainty-aware filter
+    hjnnv_filter = hjnnvUncertaintyAwareFilter(
+        dynamic_models.TaxiNetDynamics(),
+        pred_model=settings.NETWORK(),
+        grid=grid,
+        num_controls=50,
+        num_disturbances=30,
+    )
+
+    # Use random calculation to get jit compilation before the main loop
+    v_star, u_star, worst_val, val_filter = hjnnv_filter.ua_filter(
+            jnp.array(np.tan(np.deg2rad(0))),
+            hj.sets.Box(
+                jnp.array([-0.1, -0.1]),
+                jnp.array([0.1, 0.1])
+            ),
+            num_states=30,
+    )
 
     client.pauseSim(False)
 
@@ -113,13 +170,34 @@ def simulate_controller(
         image_raw = get_xplane_image()
         T_image_raw.append(image_raw)
 
+        # Get the estimated state and control without attack
+        cte_clean, he_clean, img_clean = get_state(image_raw)
+        rudder_clean = get_control(client, cte_clean, he_clean)
+
+        # Get the estimated state and control with attack
         cte, he, img = get_state(image_raw, attack=settings.ATTACK)
         logger.info("CTE: {:.2f} ({:.2f}), HE: {:.2f} ({:.2f})".format(cte, cte_gt, he, he_gt))
         rudder = get_control(client, cte, he)
+        # ipdb.set_trace()
+
+        # Use the uncertainty-aware filter to get the control input
+        state_bounds = hjnnv_filter.nnv_state_bounds(
+            jnp.array([cte, np.deg2rad(he)]),
+            jnp.abs(jnp.array([cte-cte_gt, np.deg2rad(he-he_gt)]))
+        )
+        # ipdb.set_trace()
+        v_star, u_star, worst_val, val_filter = hjnnv_filter.ua_filter(
+            jnp.array(np.tan(np.deg2rad(rudder))),
+            state_bounds,
+            num_states=30,
+        )
+        print("CTE error: {:.2f}, HE error: {:.2f}".format(cte-cte_gt, he-he_gt))
+        print("Best value: {:.2f}, Best control: {:.2f}, Worst value: {:.2f}, Filtered value: {:.2f}".format(
+            v_star, u_star, worst_val, val_filter
+        ))
+        print(f"Control: {rudder}, Filtered Control: {np.rad2deg(np.arctan(u_star))}")
         client.sendCTRL([0, rudder, rudder, throttle])
 
-        cte_clean, he_clean, img_clean = get_state(image_raw)
-        rudder_clean = get_control(client, cte_clean, he_clean)
         T_rudder_clean.append(rudder_clean)
         T_rudder.append(rudder)
 
@@ -192,6 +270,347 @@ def simulate_controller(
         T_rudder_clean=T_rudder_clean,
         T_rudder=T_rudder,
     )
+
+
+def dynamics(x, y, theta, phi_deg, dt=0.05, v=5, L=5):
+    """Dubin's car dynamics model (returns next state)
+
+    Args:
+        x: current crosstrack error (meters)
+        y: current downtrack position (meters)
+        theta: current heading error (degrees)
+        phi_deg: steering angle input (degrees)
+        -------------------------------
+        dt: time step (seconds)
+        v: speed (m/s)
+        L: distance between front and back wheels (meters)
+    """
+
+    theta_rad = np.deg2rad(theta)
+    phi_rad = np.deg2rad(phi_deg)
+
+    x_dot = v * np.sin(theta_rad)
+    y_dot = v * np.cos(theta_rad)
+    theta_dot = (v / L) * np.tan(phi_rad)
+
+    x_prime = x + x_dot * dt
+    y_prime = y + y_dot * dt
+    theta_prime = theta + np.rad2deg(theta_dot) * dt
+
+    return x_prime, theta_prime, y_prime
+
+
+def simulate_controller_dubins(
+    client, startCTE, startHE, startDTP, endDTP, get_state, get_control, dt, ctrlEvery, simSpeed=1.0
+):
+    """Simulates a controller, overriding the built-in XPlane-11 dynamics to model the aircraft
+    as a Dubin's car
+
+    Args:
+        client: XPlane Client
+        startCTE: Starting crosstrack error (meters)
+        startHE: Starting heading error (degrees)
+        startDTP: Starting downtrack position (meters)
+        endDTP: Ending downtrack position (meters)
+        getState: Function to estimate the current crosstrack and heading errors.
+                  Takes in an XPlane client and returns the crosstrack and
+                  heading error estimates
+        getControl: Function to perform control based on the state
+                    Takes in an XPlane client, the current crosstrack error estimate,
+                    and the current heading error estimate and returns a control effort
+        dt: time step (seconds)
+        crtlEvery: Frequency to get new control input
+                   (e.g. if dt=0.5, a value of 20 for ctrlEvery will perform control
+                   at a 1 Hz rate)
+        -------------------
+        simSpeed: increase beyond 1 to speed up simulation
+    """
+    # # Reset to the desired starting position
+    # client.sendDREF("sim/time/sim_speed", simSpeed)
+    # xpc3_helper.reset(client, cteInit=startCTE, heInit=startHE, dtpInit=startDTP)
+    # xpc3_helper.sendBrake(client, 0)
+
+    # time.sleep(5)  # 5 seconds to get terminal window out of the way
+
+    # cte = startCTE
+    # he = startHE
+    # dtp = startDTP
+    # startTime = client.getDREF("sim/time/zulu_time_sec")[0]
+    # endTime = startTime
+
+    # while dtp < endDTP:
+    #     image_raw = get_xplane_image()
+    #     cte_pred, he_pred, img = get_state(image_raw, attack=settings.ATTACK)
+    #     phiDeg = get_control(client, cte_pred, he_pred)
+
+    #     for i in range(ctrlEvery):
+    #         cte, he, dtp = dynamics(cte, dtp, he, phiDeg, dt)
+    #         xpc3_helper.setHomeState(client, cte, dtp, he)
+    #         time.sleep(0.03)
+
+    # client.pauseSim(True)
+
+    client.sendDREF("sim/time/sim_speed", simSpeed)
+    xpc3_helper.reset(client, cteInit=startCTE, heInit=startHE, dtpInit=startDTP)
+    xpc3_helper.sendBrake(client, 0)
+
+    if settings.FILTER:
+        grid = hj.Grid.from_lattice_parameters_and_boundary_conditions(
+            hj.sets.Box(
+                np.array([-18., -np.pi/4]),
+                np.array([18., np.pi/4])),
+            (100, 100),
+        )
+
+        # Set up the uncertainty-aware filter
+        hjnnv_filter = hjnnvUncertaintyAwareFilter(
+            dynamic_models.TaxiNetDynamics(dt=settings.DT),
+            pred_model=settings.NETWORK(),
+            grid=grid,
+            num_controls=30,
+            num_disturbances=15,
+        )
+
+        # Use random calculations to jit compile things before the main loop
+        v_star, u_star, worst_val, val_filter = hjnnv_filter.ua_filter(
+                jnp.array(np.tan(np.deg2rad(0))),
+                hj.sets.Box(
+                    jnp.array([-0.1, -0.1]),
+                    jnp.array([0.1, 0.1])
+                ),
+                num_states=10,
+        )
+        if settings.STATE_ESTIMATOR == 'tiny_taxinet':
+            dummy_input = jnp.zeros((128, 1))
+        elif settings.STATE_ESTIMATOR == 'dnn':
+            dummy_input = jnp.zeros((1, 3, 224, 224))
+
+        state_bounds = hjnnv_filter.nnv_state_bounds(
+            dummy_input,
+            0.03
+        )
+
+    
+
+        # @jax.jit
+        # def val_filter_extract(val_filter):
+        #     return float(val_filter)
+        # val_filter = val_filter_extract(val_filter)
+
+    def host_scalar(x):
+        # Works for shape-() JAX/NumPy arrays and Python floats
+        return float(np.asarray(x))
+    
+    # client.pauseSim(False)
+
+    # client.sendDREF("sim/time/sim_speed", simSpeed)
+    # xpc3_helper.reset(client, cteInit=startCTE, heInit=startHE, dtpInit=startDTP)
+    # xpc3_helper.sendBrake(client, 0)
+
+    dtp = startDTP
+    startTime = client.getDREF("sim/time/zulu_time_sec")[0]
+    now = startTime
+    endTime = startTime
+    run_end_time = now + 30
+
+    T_state_gt, T_state_clean, T_state_est = [], [], []
+    T_image_raw = []
+    T_image_clean, T_image_est = [], []
+    T_rudder_clean, T_rudder, T_rudder_filtered = [], [], []
+
+    cte_gt, dtp_gt, he_gt = xpc3_helper.getHomeState(client)
+    cte_dym, dtp_dym, he_dym = cte_gt, dtp_gt, he_gt
+
+    dt = settings.DT
+    filtering = settings.FILTER
+
+    while dtp < endDTP and now < run_end_time and np.abs(cte_gt) < 10.5:
+        simLoopTimer = time.time()
+        # Get ground truth state
+        cte_gt, dtp_gt, he_gt = xpc3_helper.getHomeState(client)
+        state_gt = np.array([cte_gt, dtp_gt, he_gt])
+        T_state_gt.append(state_gt)
+
+        image_raw = get_xplane_image()
+        T_image_raw.append(image_raw)
+
+        # Get the estimated state and control without attack
+        cte_clean, he_clean, img_clean = get_state(image_raw)
+        phiDeg_clean = get_control(client, cte_clean, he_clean)
+
+        # Get the estimated state and control with attack
+        cte_pred, he_pred, img = get_state(image_raw, attack=settings.ATTACK)
+        logger.info("----------------------------------------------------------")
+        logger.info("CTE: {:.2f} ({:.2f}), HE: {:.2f} ({:.2f})".format(cte_pred, cte_gt, he_pred, he_gt))
+        phiDeg = get_control(client, cte_pred, he_pred)
+        ctrl = phiDeg
+        # Filter debugging with bad controller
+        # phiDeg = phiDeg*0
+        # ipdb.set_trace()
+
+        # Use the uncertainty-aware filter to get the control input
+        time_start = time.time()
+        if filtering:
+            time_start1 = time.time()
+            if settings.STATE_ESTIMATOR == 'tiny_taxinet':
+                img = img.reshape(-1, 1)
+            elif settings.STATE_ESTIMATOR == 'dnn':
+                img = img.reshape(-1, 3, 224, 224)
+            # print("Time taken for reshaping: {:.5f}".format(time.time() - time_start1))
+            time_start2 = time.time()
+            state_bounds = hjnnv_filter.nnv_state_bounds(
+                img,
+                settings.ATTACK_STRENGTH
+            )
+            state_bounds = hjnnv_filter.state_bounds_from_gt(
+                jnp.array([cte_pred, np.deg2rad(he_pred)]),
+                jnp.array([cte_gt, np.deg2rad(he_gt)])
+            )
+            # ipdb.set_trace()
+            time_nnv = time.time() - time_start2
+            # print("Time taken for NNV: {:.5f}".format(time_nnv))
+            time_start3 = time.time()
+            v_star, tan_phi_star_rad, worst_val, val_filter = hjnnv_filter.ua_filter(
+                jnp.array(np.tan(np.deg2rad(phiDeg))),
+                state_bounds,
+                num_states=15,
+            )
+            
+            time_filter = time.time() - time_start3
+            # print("Time taken for filtering: {:.5f}".format(time_filter))
+            
+            time_convert = time.time()
+            phiDeg_star = jnp.rad2deg(jnp.arctan(tan_phi_star_rad))
+            # print("Time taken for rad2deg: {:.5f}".format(time.time() - time_convert))
+
+            time_check = time.time()
+            # ipdb.set_trace()
+            # # val_filter = float(val_filter)
+            # if val_filter < 0 and filtering:
+            #     ctrl = phiDeg_star
+            ctrl = jnp.where((val_filter < 0) & filtering, phiDeg_star, ctrl)
+            # print("Time taken for val check: {:.5f}".format(time.time() - time_check))
+
+            
+
+            # x_lo  = host_scalar(state_bounds.lo[0])
+            # x_hi  = host_scalar(state_bounds.hi[0])
+            # th_lo = host_scalar(state_bounds.lo[1])
+            # th_hi = host_scalar(state_bounds.hi[1])
+
+            # val_filter_h = host_scalar(val_filter)
+            # v_star_h     = host_scalar(v_star)
+            # phiDeg_h     = host_scalar(phiDeg)       # if this is JAX
+            
+            # phiDeg_star_h= host_scalar(phiDeg_star)
+
+            # ipdb.set_trace()
+
+            time_logs = time.time()
+            # logger.info("Filter Time: {:.5f}, NNV Time: {:.5f}".format(time_filter, time_nnv))
+            # logger.info("x bounds: {:.2f} <-> {:.2f}, theta bounds: {:.2f} <-> {:.2f}".format(
+            #     state_bounds.lo[0], state_bounds.hi[0], state_bounds.lo[1], state_bounds.hi[1]
+            # ))
+            # logger.info("Nominal Value: {:.2f}, Optimal value: {:.2f}".format(val_filter, v_star))
+            # logger.info("Control: {:.2f}, Filtered Control: {:.2f}".format(phiDeg, ctrl))
+            # logger.info("Filter Time: %.5f, NNV Time: %.5f", time_filter, time_nnv)
+            # logger.info("x bounds: %.2f <-> %.2f, theta bounds: %.2f <-> %.2f",
+            #             x_lo, x_hi, th_lo, th_hi)
+            # logger.info("Nominal Value: %.2f, Optimal value: %.2f",
+            #             val_filter_h, v_star_h)
+            # logger.info("Control: %.2f, Filtered Control: %.2f",
+            #             phiDeg_h, ctrl_h)
+            # T_rudder_filtered.append(phiDeg_star_h)
+            # print("Time taken for logging: {:.5f}".format(time.time() - time_logs))
+        time_filter_total = time.time() - time_start
+        logger.info("Filter Total Time: {:.5f}".format(time_filter_total))
+
+        T_rudder_clean.append(phiDeg_clean)
+        T_rudder.append(phiDeg)
+
+        T_image_clean.append(img_clean)
+        T_image_est.append(img)
+
+        state_est = np.array([cte_pred, dtp_gt, he_pred])
+        T_state_est.append(state_est)
+        state_clean = np.array([cte_clean, dtp_gt, he_clean])
+        T_state_clean.append(state_clean)
+
+        # # Wait for next timestep. 1 Hz control rate?
+        # while endTime - startTime < dt:
+        #     endTime = client.getDREF("sim/time/zulu_time_sec")[0]
+        #     time.sleep(0.001)
+
+        # # Set things for next round
+        # startTime = client.getDREF("sim/time/zulu_time_sec")[0]
+        # endTime = startTime
+        # _, dtp, _ = xpc3_helper.getHomeState(client)
+        # time.sleep(0.001)
+        # now = startTime
+        now = client.getDREF("sim/time/zulu_time_sec")[0]
+        ctrl_h = host_scalar(ctrl)
+        for i in range(ctrlEvery):
+            cte_dym, he_dym, dtp_dym = dynamics(cte_dym, dtp_dym, he_dym, ctrl_h, dt)
+            xpc3_helper.setHomeState(client, cte_dym, dtp_dym, he_dym)
+            time.sleep(0.03)
+        logger.info("Simulation loop time: {:.5f} seconds".format(time.time() - simLoopTimer))
+
+    client.pauseSim(True)
+
+    T_t = np.arange(len(T_state_gt)) * dt
+
+    T_state_gt = np.stack(T_state_gt, axis=0)
+    T_state_clean = np.stack(T_state_clean, axis=0)
+    T_state_est = np.stack(T_state_est, axis=0)
+
+    T_image_raw = np.stack(T_image_raw, axis=0)
+    T_image_clean = np.stack(T_image_clean, axis=0)
+    T_image_est = np.stack(T_image_est, axis=0)
+
+    labels = ["CTE (m)", "DTP (m)", "HE (degrees)"]
+    # Plot.
+    fig, axes = plt.subplots(3, layout="constrained")
+    for ii, ax in enumerate(axes):
+        ax.plot(T_t, T_state_gt[:, ii], color="C4", label="True")
+        ax.plot(T_t, T_state_est[:, ii], color="C1", label="Estimated")
+        ax.set_ylabel(labels[ii], rotation=0, ha="right")
+    axes[0].legend()
+    fig.savefig(results_dir + "sim2_traj.pdf")
+    plt.show()
+    plt.close(fig)
+    ###############################################3
+    # x axis = DTP, y axis = CTE.
+    cte_constr = 10.0
+    ylim = 11.0
+    fig, ax = plt.subplots(layout="constrained")
+    ax.plot(T_state_gt[:, 1], T_state_gt[:, 0], marker="o", lw=0.5, color="C1")
+    ax.set_aspect("equal")
+    ymin, ymax = ax.get_ylim()
+    ymin, ymax = min(ymin, -ylim), max(ymax, ylim)
+    ax.set_ylim(ymin, ymax)
+    ax.axhspan(cte_constr, ymax, color="C0", alpha=0.2)
+    ax.axhspan(-cte_constr, ymin, color="C0", alpha=0.2)
+    fig.savefig(results_dir + "sim2_plot2d.pdf")
+    plt.show()
+    plt.close(fig)
+
+    # Save the data.
+    np.savez(
+        results_dir + "sim2_data.npz",
+        T_state_gt=T_state_gt,
+        T_state_clean=T_state_clean,
+        T_state_est=T_state_est,
+        # T_image_raw=T_image_raw,
+        # T_image_clean=T_image_clean,
+        # T_image_est=T_image_est,
+        T_rudder_clean=T_rudder_clean,
+        T_rudder=T_rudder,
+        T_rudder_filtered=T_rudder_filtered,
+    )
+    settings_dict = {k: v for k, v in settings.__dict__.items() if not k.startswith("__") and not callable(v)}
+    with open(results_dir + "settings.json", "w") as f:
+        json.dump(settings_dict, f, indent=2, default=str)
+    
 
 
 if __name__ == "__main__":

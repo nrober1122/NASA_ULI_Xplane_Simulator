@@ -40,4 +40,4 @@ def getProportionalControlDubins(client, cte, he):
         cte: current estimate of the crosstrack error (meters)
         he: current estimate of the heading error (degrees)
     """
-    return -0.74 * cte - 0.44 * he
+    return np.clip(-0.74 * cte - 0.44 * he, -7.0, 7.0)
