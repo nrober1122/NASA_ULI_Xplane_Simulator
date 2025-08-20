@@ -1,13 +1,13 @@
 DUBINS: true
-USING_TORCH: true
+USING_TORCH: false
 
-# STATE_ESTIMATOR: "tiny_taxinet"
-STATE_ESTIMATOR: "dnn"
-ATTACK: static_atk_dnn # null means None in YAML
+STATE_ESTIMATOR: "tiny_taxinet"
+# STATE_ESTIMATOR: "cnn"
+ATTACK: null # null means None in YAML
 # ATTACK options could be: null, static_atk, static_atk_dnn
-# ATTACK_STRENGTH: 0.049
-ATTACK_STRENGTH: 0.025
-FILTER: false
+ATTACK_STRENGTH: 0.049
+# ATTACK_STRENGTH: 0.005
+FILTER: true
 
 TIME_OF_DAY: 8.0
 CLOUD_COVER: 0

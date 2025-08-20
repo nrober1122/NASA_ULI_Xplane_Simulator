@@ -3,7 +3,7 @@ import sys
 from datetime import datetime
 
 xpc3_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/src/"
-results_dir = os.environ["NASA_ULI_DATA_DIR"] + "/LOG_" + datetime.now().strftime("%Y%m%d_%H_%M_%S") + "/"
+results_dir = os.environ["NASA_ULI_DATA_DIR"] + "/logs/LOG_" + datetime.now().strftime("%Y%m%d_%H_%M_%S") + "/"
 os.makedirs(results_dir, exist_ok=True)
 
 sys.path.append(xpc3_dir)

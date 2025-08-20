@@ -14,7 +14,7 @@ from torchvision import transforms
 
 from utils.torch2jax import torch2jax
 
-from train_DNN.model_taxinet import TaxiNetDNN
+from train_DNN.model_taxinet import TaxiNetDNN, TaxiNetCNN
 
 _network: Optional[TaxiNetDNN] = None
 
@@ -47,11 +47,17 @@ def _load_network():
     device = torch.device("cpu")
     print('found device: ', device)
 
-    _network = TaxiNetDNN()
-
     # Read in the network
     NASA_ULI_ROOT_DIR = os.environ['NASA_ULI_ROOT_DIR']
-    model_dir = NASA_ULI_ROOT_DIR + '/models/pretrained_DNN_nick/'
+
+    if config["STATE_ESTIMATOR"] == "dnn":
+        _network = TaxiNetDNN()
+        model_dir = NASA_ULI_ROOT_DIR + '/models/pretrained_DNN_nick/'
+    elif config["STATE_ESTIMATOR"] == "cnn":
+        _network = TaxiNetCNN()
+        model_dir = NASA_ULI_ROOT_DIR + '/models/cnn_taxinet/'
+    else:
+        raise ValueError("Invalid STATE_ESTIMATOR")
 
     # load the pre-trained model
     if USING_TORCH:
@@ -71,7 +77,7 @@ def _load_network():
 
 def get_network():
     _load_network()
-    _network.model.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
+    # _network.model.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
     return _network
 
 

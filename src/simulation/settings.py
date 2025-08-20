@@ -110,6 +110,10 @@ elif STATE_ESTIMATOR == 'dnn':
     PROCESS_IMG = pretrained_dnn.process_image
     GET_STATE = pretrained_dnn.evaluate_network
     NETWORK = pretrained_dnn.get_network
+elif STATE_ESTIMATOR == 'cnn':
+    PROCESS_IMG = pretrained_dnn.process_image
+    GET_STATE = pretrained_dnn.evaluate_network
+    NETWORK = pretrained_dnn.get_network
 else:
     print("Invalid state estimator name - assuming fully observable")
     GET_STATE = fully_observable.getStateFullyObservable

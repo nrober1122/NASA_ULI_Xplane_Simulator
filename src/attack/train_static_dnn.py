@@ -10,16 +10,20 @@ import torch
 from loguru import logger
 from matplotlib.colors import CenteredNorm
 from torch.utils.data import DataLoader
+import yaml
 
 from simulation.controllers import get_p_control_torch, getProportionalControl
 # from simulation.tiny_taxinet2 import get_network
 # from tiny_taxinet_train.model_tiny_taxinet import TinyTaxiNetDNN
 # from tiny_taxinet_train.tiny_taxinet_dataloader import tiny_taxinet_prepare_dataloader
-from train_DNN.model_taxinet import TaxiNetDNN
+from train_DNN.model_taxinet import TaxiNetCNN, TaxiNetDNN
 from train_DNN.taxinet_dataloader import TaxiNetDataset
 
 NASA_ULI_ROOT_DIR = os.environ["NASA_ULI_ROOT_DIR"]
-DATA_DIR = os.environ["NASA_ULI_DATA_DIR"]
+# DATA_DIR = os.environ["NASA_ULI_DATA_DIR"]
+
+HJNNV_ROOT_DIR='/home/nick/code/hjnnv'
+DATA_DIR = HJNNV_ROOT_DIR + '/data/scratch/NASA_ULI_Xplane_Simulator/'
 
 
 class DNNAttackStatic(torch.nn.Module):
@@ -631,15 +635,25 @@ def main():
     # condition
     condition = 'morning'
     # larger images require a resnet, downsampled can have a small custom DNN
-    dataset_type = 'large_images'
+    dataset_type = 'images_3x224x224'
 
     model_name = 'resnet18'
-    #model_name = 'squeezenet'
-    model_dir = NASA_ULI_ROOT_DIR + '/models/pretrained_DNN_nick/'
-    model = TaxiNetDNN()
+    # model_name = 'squeezenet'
+
+    # with open("simulation/config.yaml", "r") as f:
+    #     config = yaml.safe_load(f)
+
+    model_type = "cnn" # config["STATE_ESTIMATOR"]
+
+    if model_type == "dnn":
+        model_dir = NASA_ULI_ROOT_DIR + '/models/pretrained_DNN_nick/'
+        model = TaxiNetDNN()
+    elif model_type == "cnn":
+        model_dir = NASA_ULI_ROOT_DIR + '/models/cnn_taxinet/'
+        model = TaxiNetCNN()
 
     image_size = (3, 224, 224)
-    max_delta = 0.027
+    max_delta = 0.03
     rudder_target = 1.0
     model_atk = DNNAttackStatic(image_size, max_delta, rudder_target)
     model_atk.to(device)
@@ -666,10 +680,10 @@ def main():
     #     model = freeze_model(model)
 
     # where the training results should go
-    fname = 'DNN_train_taxinet_' + str(model_name) + '_' + str(quantize)
+    fname = 'CNN_attack' + '_eps' + str(max_delta) + '_target' + str(rudder_target)
 
     # results_dir = remove_and_create_dir(SCRATCH_DIR + fname + '/') 
-    results_dir = '/home/nick/Documents/code/NASA_ULI_Xplane_Simulator/scratch/DNN_attack_static/'
+    results_dir = '/home/nick/code/hjnnv/data/scratch/attack_models/'  + fname + '/'
 
     # where raw images and csvs are saved
     BASE_DATALOADER_DIR = DATA_DIR + '/' + dataset_type  + '/' + condition
@@ -677,7 +691,7 @@ def main():
     train_dir = BASE_DATALOADER_DIR + '/' + condition + '_train'
     val_dir = BASE_DATALOADER_DIR + '/' + condition + '_validation'
 
-    train_options = {"epochs": 20,
+    train_options = {"epochs": 3,
                      "learning_rate": 1e-3, 
                      "results_dir": results_dir,
                      "train_dir": train_dir, 
@@ -721,7 +735,7 @@ def main():
 
     # save the best model to the directory
     # import pdb; pdb.set_trace()
-    torch.save(model_atk.state_dict(), results_dir + "/best_model_nick.pt")
+    torch.save(model_atk.state_dict(), results_dir + "best_model.pt")
 
 
 if __name__ == "__main__":

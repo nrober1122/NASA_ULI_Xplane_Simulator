@@ -114,19 +114,19 @@ def monte_carlo_bounds(
 
 def auto_lirpa_bounds(image, eps):
     bound_opts = {
-        # 'relu': "CROWN-IBP",
-        'relu': "IBP",
+        'relu': "CROWN-IBP",
+        # 'relu': "IBP",
         # 'sparse_intermediate_bounds': False,
         # 'sparse_conv_intermediate_bounds': False,
         # 'sparse_intermediate_bounds_with_ibp': False,
-        'sparse_intermediate_bounds': True,
-        'sparse_conv_intermediate_bounds': True,
-        'sparse_intermediate_bounds_with_ibp': True,
+        'sparse_intermediate_bounds': False,
+        'sparse_conv_intermediate_bounds': False,
+        'sparse_intermediate_bounds_with_ibp': False,
         'sparse_features_alpha': False,
         'sparse_spec_alpha': False,
-        'reduce_layers': True,
+        'reduce_layers': False,
         # 'zero-lb': True,
-        'same-slope': True,
+        # 'same-slope': True,
     }
     model = settings.NETWORK()
 
@@ -134,6 +134,9 @@ def auto_lirpa_bounds(image, eps):
         x = image.reshape(1, 128, 1)
         dummy_input = torch.empty(1, 128, 1)
     elif settings.STATE_ESTIMATOR == 'dnn':
+        x = image.reshape(1, 3, 224, 224)
+        dummy_input = torch.empty(1, 3, 224, 224)
+    elif settings.STATE_ESTIMATOR == 'cnn':
         x = image.reshape(1, 3, 224, 224)
         dummy_input = torch.empty(1, 3, 224, 224)
     else:
@@ -151,7 +154,7 @@ def auto_lirpa_bounds(image, eps):
 
     lb, ub = bounded_model.compute_bounds(
         x=(bounded_image,),
-        method="backward"
+        method="CROWN"
     )
 
     return hj.sets.Box(lb.detach().numpy().flatten(), ub.detach().numpy().flatten())
@@ -217,23 +220,22 @@ def main():
             settings.ATTACK_STRENGTH
         )
 
-    # sampled_state_bounds = monte_carlo_bounds(
-    #     ptbd_image,
-    #     settings.ATTACK_STRENGTH,
-    #     settings.NETWORK(),
-    #     num_samples=int(1e7),
-    #     batch_size=2048
-    # )
+    sampled_state_bounds = monte_carlo_bounds(
+        ptbd_image,
+        settings.ATTACK_STRENGTH,
+        settings.NETWORK(),
+        num_samples=int(1e6),
+        batch_size=2048
+    )
 
     auto_lirpa_state_bounds = auto_lirpa_bounds(
         ptbd_image,
         settings.ATTACK_STRENGTH,
     )
 
-    print(state_bounds)
-    print(auto_lirpa_state_bounds)
-
-    # print(sampled_state_bounds)
+    print("JAX state bounds: ", state_bounds)
+    print("Auto LIRPA state bounds: ", auto_lirpa_state_bounds)
+    print("Sampled state bounds: ", sampled_state_bounds)
 
 
 if __name__ == "__main__":

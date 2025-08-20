@@ -13,7 +13,7 @@ _network: Optional[DNNAttackStatic] = None
 with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
-def _load_network():
+def _load_network(state):
     global _network
 
     if _network is not None:

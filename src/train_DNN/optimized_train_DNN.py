@@ -23,7 +23,7 @@ import numpy as np
 from tqdm.autonotebook import tqdm as tqdm
 from torch.utils.tensorboard import SummaryWriter
 
-from model_taxinet import TaxiNetDNN, freeze_model, QuantTaxiNetDNN
+from model_taxinet import TaxiNetDNN, freeze_model, QuantTaxiNetDNN, TaxiNetCNN
 from taxinet_dataloader import *
 from plot_utils import *
 
@@ -31,6 +31,7 @@ from PIL import Image
 from torchvision import transforms
 
 # make sure this is a system variable in your bashrc
+HJNNV_ROOT_DIR='/home/nick/code/hjnnv'
 NASA_ULI_ROOT_DIR=os.environ['NASA_ULI_ROOT_DIR']
 model_dir = NASA_ULI_ROOT_DIR + '/pretrained_DNN_nick/'
 debug_dir = NASA_ULI_ROOT_DIR + '/scratch/debug/'
@@ -41,27 +42,30 @@ torch.cuda.empty_cache()
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print('found device: ', device)
 
-model = TaxiNetDNN()
+model = TaxiNetCNN()
 
-# load the pre-trained model
-if device.type == 'cpu':
-    model.load_state_dict(torch.load(model_dir + 'best_model.pt', map_location=torch.device('cpu')))
-else:
-    model.load_state_dict(torch.load(model_dir + 'best_model.pt'))
+# # load the pre-trained model
+# if device.type == 'cpu':
+#     model.load_state_dict(torch.load(model_dir + 'best_model.pt', map_location=torch.device('cpu')))
+# else:
+#     model.load_state_dict(torch.load(model_dir + 'best_model.pt'))
 
 model = model.to(device)
 model.eval()
 
-DATA_DIR = os.environ['NASA_ULI_DATA_DIR']
+# DATA_DIR = os.environ['NASA_ULI_DATA_DIR']
+DATA_DIR = HJNNV_ROOT_DIR + '/data/scratch/NASA_ULI_Xplane_Simulator/'
 
 # where intermediate results are saved
 # never save this to the main git repo
-SCRATCH_DIR = NASA_ULI_ROOT_DIR + '/scratch/'
+SCRATCH_DIR = HJNNV_ROOT_DIR + '/scratch/'
 
 UTILS_DIR = NASA_ULI_ROOT_DIR + '/src/utils/'
 sys.path.append(UTILS_DIR)
 
 from textfile_utils import *
+from datetime import datetime
+import os
 
 
 def train_model(model, datasets, dataloaders, dist_fam, optimizer, device, results_dir, num_epochs=25, log_every=100):
@@ -191,7 +195,7 @@ def train_model(model, datasets, dataloaders, dist_fam, optimizer, device, resul
 
     # plot the results to a file
     plot_file = results_dir + '/loss.pdf' 
-    basic_plot_ts(train_loss_vec, val_loss_vec, plot_file, legend = ['Train Loss', 'Val Loss'])
+    basic_plot_ts(train_loss_vec, val_loss_vec, plot_file, legend=['Train Loss', 'Val Loss'])
 
     # load best model weights
     model.load_state_dict(best_model_wts)
@@ -209,11 +213,11 @@ if __name__=='__main__':
     # condition
     condition = 'morning'
     # larger images require a resnet, downsampled can have a small custom DNN
-    dataset_type = 'large_images'
+    dataset_type = 'images_3x224x224'
 
-    model_name = 'resnet18'
+    # model_name = 'resnet18'
     #model_name = 'squeezenet'
-
+    model_name = 'cnn'
 
     # if quantize:
     #     device = torch.device("cpu")
@@ -228,10 +232,13 @@ if __name__=='__main__':
 
     # import pdb; pdb.set_trace()
     # where the training results should go
-    fname = 'DNN_train_taxinet_' + str(model_name) + '_' + str(quantize)
+    fname = 'DNN_train_taxinet_' + str(model_name) + '_' + datetime.now().strftime('%Y%m%d_%H%M%S')
 
     # results_dir = remove_and_create_dir(SCRATCH_DIR + fname + '/') 
-    results_dir = '/home/nick/Documents/code/NASA_ULI_Xplane_Simulator/scratch/DNN_train_taxinet_resnet18_False/'
+    # results_dir = '/home/nick/Documents/code/NASA_ULI_Xplane_Simulator/scratch/DNN_train_taxinet_resnet18_False/'
+    results_dir = HJNNV_ROOT_DIR + '/data/scratch/NASA_ULI_Xplane_Simulator/learned_models/' + fname + '/'
+    # Create the results directory if it doesn't exist
+    os.makedirs(results_dir, exist_ok=True)
 
     # where raw images and csvs are saved
     BASE_DATALOADER_DIR = DATA_DIR + '/' + dataset_type  + '/' + condition
@@ -239,10 +246,10 @@ if __name__=='__main__':
     train_dir = BASE_DATALOADER_DIR + '/' + condition + '_train'
     val_dir = BASE_DATALOADER_DIR + '/' + condition + '_validation'
 
-    train_options = {"epochs": 5,
-                     "learning_rate": 1e-3, 
+    train_options = {"epochs": 10,
+                     "learning_rate": 1e-3,
                      "results_dir": results_dir,
-                     "train_dir": train_dir, 
+                     "train_dir": train_dir,
                      "val_dir": val_dir
                      }
 
@@ -278,58 +285,58 @@ if __name__=='__main__':
     dataloaders['train'] = train_loader
     dataloaders['val'] = val_loader
 
+    # # import pdb; pdb.set_trace()
+    # img = val_loader.dataset[2][0].detach().numpy().transpose([1, 2, 0])
+    # pil_img = Image.fromarray((img * 225).astype(np.uint8))
+    # pil_img.save(debug_dir+'dataloader_day2.png')
+
+    # dtpt_x = val_dataset[2][0].reshape((1,3,224,224))
+    # dtpt_y = val_dataset[2][1]
+
+    # model = model.cpu()
     # import pdb; pdb.set_trace()
-    img = val_loader.dataset[2][0].detach().numpy().transpose([1, 2, 0])
-    pil_img = Image.fromarray((img * 225).astype(np.uint8))
-    pil_img.save(debug_dir+'dataloader_day2.png')
+    # y_pred = model(dtpt_x)
+    # print(loss_func(y_pred, dtpt_y))
 
-    dtpt_x = val_dataset[2][0].reshape((1,3,224,224))
-    dtpt_y = val_dataset[2][1]
+    # # img2 = Image.open(SCRATCH_DIR + 'debug/untransformed.png').convert('RGB')
+    # # img2_arr = np.asarray(img2)
 
-    model = model.cpu()
-    import pdb; pdb.set_trace()
-    y_pred = model(dtpt_x)
-    print(loss_func(y_pred, dtpt_y))
+    # # tfms = transforms.Compose([transforms.Resize((224, 224)),
+    # #                                     transforms.ToTensor(),
+    # #                                     transforms.Normalize([0.485, 0.456, 0.406],
+    # #                                                          [0.229, 0.224, 0.225]),])
+    # # # tfms = transforms.Compose([transforms.Resize((width, height)), transforms.ToTensor()])
+    # # pil_img = Image.fromarray(img2_arr)
+    # # tfm_img = tfms(pil_img)
 
-    # img2 = Image.open(SCRATCH_DIR + 'debug/untransformed.png').convert('RGB')
-    # img2_arr = np.asarray(img2)
-
+    # # tfm_img2 = tfms(img2).detach().numpy().transpose([1, 2, 0])
+    # # pil_img2 = Image.fromarray((tfm_img2 * 225).astype(np.uint8))
+    # # pil_img2.save(debug_dir+'my_method_day2.png')
     # tfms = transforms.Compose([transforms.Resize((224, 224)),
     #                                     transforms.ToTensor(),
     #                                     transforms.Normalize([0.485, 0.456, 0.406],
     #                                                          [0.229, 0.224, 0.225]),])
-    # # tfms = transforms.Compose([transforms.Resize((width, height)), transforms.ToTensor()])
-    # pil_img = Image.fromarray(img2_arr)
-    # tfm_img = tfms(pil_img)
 
-    # tfm_img2 = tfms(img2).detach().numpy().transpose([1, 2, 0])
-    # pil_img2 = Image.fromarray((tfm_img2 * 225).astype(np.uint8))
-    # pil_img2.save(debug_dir+'my_method_day2.png')
-    tfms = transforms.Compose([transforms.Resize((224, 224)),
-                                        transforms.ToTensor(),
-                                        transforms.Normalize([0.485, 0.456, 0.406],
-                                                             [0.229, 0.224, 0.225]),])
-
-    pil_img4 = Image.open(SCRATCH_DIR + 'debug/untransformed_day3.png').convert('RGB')
-    pil_img4.save(debug_dir+'resave_ss_day3.png')
-    tfm_img4 = tfms(pil_img4)
-    img4 = tfm_img4.detach().numpy().transpose([1, 2, 0])
-    pil_img42 = Image.fromarray((img4 * 225).astype(np.uint8))
-    pil_img42.save(debug_dir+'my_method_day3.png')
+    # pil_img4 = Image.open(SCRATCH_DIR + 'debug/untransformed_day3.png').convert('RGB')
+    # pil_img4.save(debug_dir+'resave_ss_day3.png')
+    # tfm_img4 = tfms(pil_img4)
+    # img4 = tfm_img4.detach().numpy().transpose([1, 2, 0])
+    # pil_img42 = Image.fromarray((img4 * 225).astype(np.uint8))
+    # pil_img42.save(debug_dir+'my_method_day3.png')
 
 
-    ### from dataset ####
-    pil_img3 = Image.open(DATA_DIR + '/large_images/morning_nick/morning_nick_train/MWH_Runway04_morning_clear_11_304.png')
-    pil_img3.save(debug_dir+'resave_dtpt_day3.png')
-    tfm_img3 = tfms(pil_img3)
-    img3 = tfm_img3.detach().numpy().transpose([1, 2, 0])
-    pil_img32 = Image.fromarray((img3 * 225).astype(np.uint8))
-    pil_img32.save(debug_dir+'my_method_from_data_day3.png')
-    # for X_batch, y_batch in val_loader:
-    #     y_pred = model(X_batch)
-    #     loss = loss_func(y_pred, y_batch)
-    #     print(loss)
-    import pdb; pdb.set_trace()
+    # ### from dataset ####
+    # pil_img3 = Image.open(DATA_DIR + '/large_images/morning_nick/morning_nick_train/MWH_Runway04_morning_clear_11_304.png')
+    # pil_img3.save(debug_dir+'resave_dtpt_day3.png')
+    # tfm_img3 = tfms(pil_img3)
+    # img3 = tfm_img3.detach().numpy().transpose([1, 2, 0])
+    # pil_img32 = Image.fromarray((img3 * 225).astype(np.uint8))
+    # pil_img32.save(debug_dir+'my_method_from_data_day3.png')
+    # # for X_batch, y_batch in val_loader:
+    # #     y_pred = model(X_batch)
+    # #     loss = loss_func(y_pred, y_batch)
+    # #     print(loss)
+    # import pdb; pdb.set_trace()
 
 
 
