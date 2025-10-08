@@ -8,12 +8,14 @@ import torch
 import jax
 import jax.numpy as jnp
 
-from utils.torch2jax import torch2jax
+# from utils.torch2jax import torch2jax
+from utils.torch2jaxmodel import torch_to_jax_model
 
 with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
-from tiny_taxinet_train.model_tiny_taxinet import TinyTaxiNetDNN
+# from tiny_taxinet_train.model_tiny_taxinet import TinyTaxiNetDNN
+from simulators.NASA_ULI_Xplane_Simulator.src.tiny_taxinet_train.model_tiny_taxinet import TinyTaxiNetDNN
 
 _network: Optional[TinyTaxiNetDNN] = None
 USING_TORCH = config["USING_TORCH"]
@@ -49,7 +51,8 @@ def _load_network():
         _network.load_state_dict(torch.load(model_dir + '/best_model.pt', map_location=torch.device('cpu')))
         # import ipdb; ipdb.set_trace()
         jax.config.update("jax_platform_name", "cpu")
-        _network = torch2jax(_network)
+        # _network = torch2jax(_network)
+        _network = torch_to_jax_model(_network)
 
 
 def get_network():
@@ -69,8 +72,8 @@ def evaluate_network(image: np.ndarray):
             return pred[0], pred[1]
     else:
         # Convert to JAX
-        image = jax.numpy.array(image).reshape(-1, 1)
-        pred = _network(image)
-        pred = jax.device_get(pred).squeeze()
+        # image = jax.numpy.array(image).reshape(-1, 1)
+        pred = _network(image).squeeze()
+        # pred = jax.device_get(pred).squeeze()
         # [ cte, heading ]
-        return pred[0], pred[1]
+        return pred

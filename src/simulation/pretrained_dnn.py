@@ -8,13 +8,15 @@ import mss
 import numpy as np
 import torch
 import jax
+import jax.numpy as jnp
 from nnet import *
 from PIL import Image
 from torchvision import transforms
 
-from utils.torch2jax import torch2jax
+# from utils.torch2jax import torch2jax
+from utils.torch2jaxmodel import torch_to_jax_model
 
-from train_DNN.model_taxinet import TaxiNetDNN, TaxiNetCNN
+from simulators.NASA_ULI_Xplane_Simulator.src.train_DNN.model_taxinet import TaxiNetDNN, TaxiNetCNN
 
 _network: Optional[TaxiNetDNN] = None
 
@@ -24,8 +26,8 @@ with open("config.yaml", "r") as f:
 USING_TORCH = config["USING_TORCH"]
 
 ### IMPORTANT PARAMETERS FOR IMAGE PROCESSING ###
-width = 224    # Width of image
-height = 224    # Height of image
+# width = 224    # Width of image
+# height = 224    # Height of image
 
 screenShot = mss.mss()
 monitor = {'top': 100, 'left': 100, 'width': 1720, 'height': 960}
@@ -36,7 +38,7 @@ device = torch.device("cpu")
 print('found device: ', device)
 
 
-def _load_network():
+def _load_network(in_channels=3, H=224, W=224):
     global _network
 
     if _network is not None:
@@ -54,8 +56,11 @@ def _load_network():
         _network = TaxiNetDNN()
         model_dir = NASA_ULI_ROOT_DIR + '/models/pretrained_DNN_nick/'
     elif config["STATE_ESTIMATOR"] == "cnn":
-        _network = TaxiNetCNN()
+        _network = TaxiNetCNN(input_channels=in_channels, H=H, W=W)
         model_dir = NASA_ULI_ROOT_DIR + '/models/cnn_taxinet/'
+    elif config["STATE_ESTIMATOR"] == "cnn64":
+        _network = TaxiNetCNN(input_channels=in_channels, H=H, W=W)
+        model_dir = NASA_ULI_ROOT_DIR + '/models/cnn64_taxinet/'
     else:
         raise ValueError("Invalid STATE_ESTIMATOR")
 
@@ -72,11 +77,11 @@ def _load_network():
         _network.load_state_dict(torch.load(model_dir + '/best_model.pt', map_location=torch.device('cpu')))
         # import ipdb; ipdb.set_trace()
         jax.config.update("jax_platform_name", "cpu")
-        _network = torch2jax(_network)
+        _network = torch_to_jax_model(_network)
 
 
-def get_network():
-    _load_network()
+def get_network(in_channels=3, H=224, W=224):
+    _load_network(in_channels, H, W)
     # _network.model.maxpool = torch.nn.MaxPool2d(kernel_size=2, stride=2, padding=1)
     return _network
 
@@ -104,39 +109,48 @@ def _crop_image(image_arr: np.ndarray):
     return image
 
 
-def _normalize_image(image: np.ndarray):
+def _normalize_image(image: np.ndarray, in_channels: int, width: int, height: int) -> torch.Tensor:
     """Normalize the image, then flattens it. Input: (8, 16). Output: (128,)."""
     pil_image = Image.fromarray(image)
     assert pil_image.size == (screen_width, screen_height)
-    tfms = transforms.Compose([transforms.Resize((width, height)),
-                                        transforms.ToTensor(),
-                                        transforms.Normalize([0.485, 0.456, 0.406],
-                                                             [0.229, 0.224, 0.225]),])
-    
+
+    if in_channels == 3:
+        tfms = transforms.Compose([transforms.Resize((height, width)),
+                                    transforms.ToTensor(),
+                                    transforms.Normalize([0.485, 0.456, 0.406],
+                                                         [0.229, 0.224, 0.225]),])
+    elif in_channels == 1:
+        mean, std = [0.5], [0.5]
+        tfms = transforms.Compose([
+                transforms.Resize((height, width)),
+                transforms.Grayscale(num_output_channels=1),
+                transforms.ToTensor(),
+                transforms.Normalize(mean, std),
+            ])
     return tfms(pil_image)
 
 
-def process_image(image: np.ndarray) -> np.ndarray:
+def process_image(image: np.ndarray, in_channels: int, width: int, height: int) -> np.ndarray:
     """Process the image for use with TinyTaxiNet.
     Input: (1080, 1920, 4)
     Output: (1, 3, 224, 224)
     """
     assert image.shape == (1080, 1920, 4)
 
-    image_processed = _normalize_image(_crop_image(image))
+    image_processed = _normalize_image(_crop_image(image), in_channels, width, height)
 
-    assert image_processed.shape == (3, width, height)
+    assert image_processed.shape == (in_channels, width, height)
     return image_processed
 
 
-def evaluate_network(image: np.ndarray):
+def evaluate_network(image: np.ndarray, in_channels: int, width: int, height: int) -> np.ndarray:
     """Evaluate the network on the preprocessed image.
     Image: (128 = 8 * 16,)
     """
-    _load_network()
-    assert image.shape == (3, width, height)
+    _load_network(in_channels, width, height)
+    assert image.shape == (in_channels, width, height)
 
-    image = image.reshape(1, 3, width, height)
+    image = image.reshape(1, in_channels, width, height)
     # print(torch.version.cuda)        # Should match your installed CUDA toolkit
     # print(torch.backends.cudnn.version())  # Should be a valid cuDNN version
     # print(torch.cuda.is_available())       # Should be True
@@ -145,8 +159,9 @@ def evaluate_network(image: np.ndarray):
         image = image.to(device)
     else:
         # Convert to JAX
-        image = image.detach().cpu().numpy()
-        image = jax.numpy.array(image)
+        if isinstance(image, torch.Tensor):
+            image = image.detach().cpu().numpy()
+            image = jax.numpy.array(image)
 
     pred = _network(image)
 
@@ -156,4 +171,37 @@ def evaluate_network(image: np.ndarray):
         pred = jax.device_get(pred).squeeze()
 
     # return scaled output
-    return pred[0]*10, pred[1]*30
+    # return pred[0]*10, pred[1]*30
+    return pred*jnp.array([10.0, 30.0])
+
+# def evaluate_network_jax(image: np.ndarray, in_channels: int, width: int, height: int) -> jnp.ndarray:
+#     """Evaluate the network on the preprocessed image.
+#     Image: (128 = 8 * 16,)
+#     """
+#     _load_network(in_channels, width, height)
+#     assert image.shape == (in_channels, width, height)
+
+#     image = image.reshape(1, in_channels, width, height)
+#     # print(torch.version.cuda)        # Should match your installed CUDA toolkit
+#     # print(torch.backends.cudnn.version())  # Should be a valid cuDNN version
+#     # print(torch.cuda.is_available())       # Should be True
+
+#     if USING_TORCH:
+#         image = image.to(device)
+#     else:
+#         # Convert to JAX
+#         if isinstance(image, torch.Tensor):
+#             image = image.detach().cpu().numpy()
+#             image = jax.numpy.array(image)
+
+#     pred = _network(image)
+
+#     if USING_TORCH:
+#         pred = pred.cpu().detach().numpy().flatten()
+#         pred = jax.numpy.array(pred).squeeze()
+#     else:
+#         pred = jax.device_get(pred).squeeze()
+
+#     # return scaled output
+#     # return pred[0]*10, pred[1]*30
+#     return pred*jnp.array([10.0, 30.0])

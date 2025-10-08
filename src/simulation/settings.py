@@ -8,6 +8,9 @@ import tiny_taxinet
 import tiny_taxinet2
 import static_atk
 import static_atk_dnn
+from utils.attacks import fgsm, pgd
+from typing import Callable
+from functools import partial
 
 """ 
 Parameters to be specified by user
@@ -22,6 +25,7 @@ STATE_ESTIMATOR = config["STATE_ESTIMATOR"]
 USING_TORCH = config["USING_TORCH"]
 ATTACK_STRING = config["ATTACK"]        # Will be None if YAML has null
 ATTACK_STRENGTH = config["ATTACK_STRENGTH"]
+TARGET = config["TARGET"]
 FILTER = config["FILTER"]
 TIME_OF_DAY = config["TIME_OF_DAY"]
 CLOUD_COVER = config["CLOUD_COVER"]
@@ -110,17 +114,34 @@ elif STATE_ESTIMATOR == 'dnn':
     PROCESS_IMG = pretrained_dnn.process_image
     GET_STATE = pretrained_dnn.evaluate_network
     NETWORK = pretrained_dnn.get_network
-elif STATE_ESTIMATOR == 'cnn':
-    PROCESS_IMG = pretrained_dnn.process_image
-    GET_STATE = pretrained_dnn.evaluate_network
-    NETWORK = pretrained_dnn.get_network
+elif STATE_ESTIMATOR in ['cnn', 'cnn64']:
+    if STATE_ESTIMATOR == 'cnn':
+        H, W = 224, 224
+        in_channels = 3
+    elif STATE_ESTIMATOR == 'cnn64':
+        H, W = 64, 64
+        in_channels = 1
+    print(f"Using {STATE_ESTIMATOR} with in_channels={in_channels}, H={H}, W={W}")
+    PROCESS_IMG = partial(pretrained_dnn.process_image, in_channels=in_channels, width=W, height=H)
+    GET_STATE = partial(pretrained_dnn.evaluate_network, in_channels=in_channels, width=W, height=H)
+    NETWORK = partial(pretrained_dnn.get_network, in_channels=in_channels, W=W, H=H)
+    # PROCESS_IMG = pretrained_dnn.process_image
+    # GET_STATE = pretrained_dnn.evaluate_network
+    # NETWORK = pretrained_dnn.get_network
 else:
     print("Invalid state estimator name - assuming fully observable")
     GET_STATE = fully_observable.getStateFullyObservable
 
 if ATTACK_STRING is None:
+    ATTACK_STRING = "null"
     ATTACK = None
 elif ATTACK_STRING == 'static_atk':
     ATTACK = static_atk
 elif ATTACK_STRING == 'static_atk_dnn':
     ATTACK = static_atk_dnn
+elif ATTACK_STRING == 'fgsm':
+    ATTACK = fgsm
+elif ATTACK_STRING == 'pgd':
+    ATTACK = pgd
+else:
+    ATTACK = lambda image: 0.0*image  # No attack if invalid string

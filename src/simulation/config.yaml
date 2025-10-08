@@ -3,16 +3,20 @@ USING_TORCH: false
 
 STATE_ESTIMATOR: "tiny_taxinet"
 # STATE_ESTIMATOR: "cnn"
-ATTACK: null # null means None in YAML
-# ATTACK options could be: null, static_atk, static_atk_dnn
-ATTACK_STRENGTH: 0.049
+ATTACK: fgsm   # null means None in YAML
+# ATTACK: static_atk
+# ATTACK options could be: null, static_atk, static_atk_dnn, fgsm, pgd
+# ATTACK_STRENGTH: 0.049
+# ATTACK_STRENGTH: 0.0005
+ATTACK_STRENGTH: 0.015
+TARGET: 7.0
 # ATTACK_STRENGTH: 0.005
-FILTER: true
+FILTER: false
 
 TIME_OF_DAY: 8.0
 CLOUD_COVER: 0
 
-START_CTE: 6.0
+START_CTE: -9.5
 START_HE: 0.0 
 START_DTP: 322.0
 END_DTP: 522.0

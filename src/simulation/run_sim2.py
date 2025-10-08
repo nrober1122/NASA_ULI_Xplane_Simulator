@@ -32,6 +32,7 @@ import xpc3_helper
 from utils.torch2jax import torch2jax
 import hj_reachability as hj
 from hjnnv import hjnnvUncertaintyAwareFilter
+from utils.attacks import fgsm, pgd
 import dynamic_models
 import tiny_taxinet2
 import json
@@ -41,14 +42,19 @@ import matplotlib.pyplot as plt
 jax.config.update('jax_platform_name', 'cpu')
 
 
-def get_state(image_raw: np.ndarray, attack: Callable = None):
+def get_state(image_raw: np.ndarray, attack: Callable = None, target: jnp.ndarray = None, adv_ptb_prev=None, key=None):
     # Process image before passing it to NN estimator
     image_processed = settings.PROCESS_IMG(image_raw)
+    image_processed_jnp = jnp.array(image_processed)
+
+    if not settings.USING_TORCH:
+        image_processed = jax.numpy.array(image_processed)
 
     # Add adversarial attack if applicable
-    if attack is not None:
+    if 'static' in settings.ATTACK_STRING:
         # image_processed += attack.get_patch(image_processed, 0.032)
-        image_processed += attack.get_patch(image_processed, settings.ATTACK_STRENGTH)
+        if attack is not None:
+            image_processed += settings.ATTACK.get_patch(image_processed, settings.ATTACK_STRENGTH)
         # pil_img = Image.fromarray((attack.get_patch(image_processed).reshape((8,16)))*255+125)
         # pil_img = pil_img.convert("L")
         # pil_img.save(results_dir + 'mask.png')
@@ -57,11 +63,58 @@ def get_state(image_raw: np.ndarray, attack: Callable = None):
         # pil2.save(results_dir + 'dnn_mask.png')
 
         # import pdb; pdb.set_trace()
+    elif settings.ATTACK_STRING == 'fgsm':
+        print("Using FGSM attack")
+        if target is None and attack is not None:
+            raise ValueError("Target must be provided for FGSM attack")
+        elif attack is not None:
+            adv_image, loss, perturbation = fgsm(
+                model=settings.GET_STATE,
+                target=jnp.array(target),
+                observation=jnp.array(image_processed),
+                epsilon=settings.ATTACK_STRENGTH,
+                loss_fn=attack
+            )
+            if adv_ptb_prev is not None and loss > 100.0:
+                print("Reusing previous adv image")
+                perturbation = adv_ptb_prev
+            image_processed += perturbation
+            print(f"FGSM attack loss: {loss}")
+    elif settings.ATTACK_STRING == 'pgd':
+        print("Using PGD attack")
+        if target is None and attack is not None:
+            raise ValueError("Target must be provided for PGD attack")
+        elif attack is not None:
+            print("Using PGD attack")
+            adv_image, loss, perturbation = pgd(
+                model=settings.GET_STATE,
+                target=jnp.array(target),
+                observation=jnp.array(image_processed),
+                epsilon=settings.ATTACK_STRENGTH,
+                iters=40,
+                alpha=0.005,
+                loss_fn=attack,
+                key=key
+            )
+            if adv_ptb_prev is not None and loss > 100.0:
+                perturbation = adv_ptb_prev
+            image_processed += perturbation
+            print(f"PGD attack loss: {loss}")
+
+    elif settings.ATTACK_STRING == 'null':
+        pass
+
+    elif settings.ATTACK_STRING is not None:
+        raise ValueError("Attack type not recognized")
 
     # Estimate state from processed image
     cte, he = settings.GET_STATE(image_processed)
 
-    return cte, he, image_processed
+    image_attacked_jnp = jnp.array(image_processed)
+    if attack is not None and settings.ATTACK_STRING != 'null':
+        print("Max perturbation end of fcn:", jnp.max(jnp.abs(image_attacked_jnp - image_processed_jnp)))
+
+    return cte, he, image_processed, perturbation if 'perturbation' in locals() else None
 
 
 def main():
@@ -116,18 +169,20 @@ def simulate_controller(
             np.array([15., np.pi/4])),
         (100, 100),
     )
+    values = -jnp.abs(grid.states[..., 0]) + 10.0
 
     # Set up the uncertainty-aware filter
     hjnnv_filter = hjnnvUncertaintyAwareFilter(
         dynamic_models.TaxiNetDynamics(),
         pred_model=settings.NETWORK(),
         grid=grid,
+        initial_values=values,
         num_controls=50,
         num_disturbances=30,
     )
 
     # Use random calculation to get jit compilation before the main loop
-    v_star, u_star, worst_val, val_filter = hjnnv_filter.ua_filter(
+    v_star, u_star, worst_val, val_filter, _, _ = hjnnv_filter.ua_filter(
             jnp.array(np.tan(np.deg2rad(0))),
             hj.sets.Box(
                 jnp.array([-0.1, -0.1]),
@@ -353,6 +408,7 @@ def simulate_controller_dubins(
     client.sendDREF("sim/time/sim_speed", simSpeed)
     xpc3_helper.reset(client, cteInit=startCTE, heInit=startHE, dtpInit=startDTP)
     xpc3_helper.sendBrake(client, 0)
+    key = jax.random.PRNGKey(0)
 
     if settings.FILTER:
         grid = hj.Grid.from_lattice_parameters_and_boundary_conditions(
@@ -361,18 +417,20 @@ def simulate_controller_dubins(
                 np.array([18., np.pi/4])),
             (100, 100),
         )
+        values = -jnp.abs(grid.states[..., 0]) + 10.0
 
         # Set up the uncertainty-aware filter
         hjnnv_filter = hjnnvUncertaintyAwareFilter(
             dynamic_models.TaxiNetDynamics(dt=settings.DT),
             pred_model=settings.NETWORK(),
             grid=grid,
+            initial_values=values,
             num_controls=30,
             num_disturbances=15,
         )
 
         # Use random calculations to jit compile things before the main loop
-        v_star, u_star, worst_val, val_filter = hjnnv_filter.ua_filter(
+        v_star, u_star, worst_val, val_filter, _, _, _, _ = hjnnv_filter.ua_filter_best_u(
                 jnp.array(np.tan(np.deg2rad(0))),
                 hj.sets.Box(
                     jnp.array([-0.1, -0.1]),
@@ -381,9 +439,11 @@ def simulate_controller_dubins(
                 num_states=10,
         )
         if settings.STATE_ESTIMATOR == 'tiny_taxinet':
-            dummy_input = jnp.zeros((128, 1))
+            dummy_input = jnp.zeros((128,))
         elif settings.STATE_ESTIMATOR == 'dnn':
             dummy_input = jnp.zeros((1, 3, 224, 224))
+        elif settings.STATE_ESTIMATOR == 'cnn64':
+            dummy_input = jnp.zeros((1, 1, 64, 64))
 
         state_bounds = hjnnv_filter.nnv_state_bounds(
             dummy_input,
@@ -411,7 +471,7 @@ def simulate_controller_dubins(
     startTime = client.getDREF("sim/time/zulu_time_sec")[0]
     now = startTime
     endTime = startTime
-    run_end_time = now + 30
+    run_end_time = now + 50.0
 
     T_state_gt, T_state_clean, T_state_est = [], [], []
     T_image_raw = []
@@ -424,6 +484,16 @@ def simulate_controller_dubins(
     dt = settings.DT
     filtering = settings.FILTER
 
+    image_raw = get_xplane_image()
+    cte_clean, he_clean, img_clean, adv_image = get_state(image_raw)
+    adv_img = jnp.zeros_like(img_clean)
+
+
+    def rudder_target(pos, target_rudder=-1.0):
+        cte, he = pos
+        rudder = jnp.clip(-0.74 * cte - 0.44 * he, -7.0, 7.0)
+        return (rudder - target_rudder)**2
+
     while dtp < endDTP and now < run_end_time and np.abs(cte_gt) < 10.5:
         simLoopTimer = time.time()
         # Get ground truth state
@@ -435,11 +505,28 @@ def simulate_controller_dubins(
         T_image_raw.append(image_raw)
 
         # Get the estimated state and control without attack
-        cte_clean, he_clean, img_clean = get_state(image_raw)
+        cte_clean, he_clean, img_clean, _ = get_state(image_raw)
         phiDeg_clean = get_control(client, cte_clean, he_clean)
 
         # Get the estimated state and control with attack
-        cte_pred, he_pred, img = get_state(image_raw, attack=settings.ATTACK)
+        # if cte_gt >= 0.0:
+        #     target = jnp.array([cte_clean + 2.0, he_clean])
+        # elif cte_gt < 0.0:
+        #     target = jnp.array([-10.0, 0.0])
+        # target = jnp.array([cte_clean - 10.0, he_clean - 15.0])
+        
+        # target = settings.TARGET
+        
+        # if cte_gt <= 0.0:
+        #     target = jnp.array([cte_clean - 2.0, he_clean - 10.0])
+        # else:
+        #     target = jnp.array([0.0, 0.0])
+        target = 2 - 7/10 * (cte_gt - 10)
+        # target = 7.0
+
+        print("Target for attack:", target)
+        key, subkey = jax.random.split(key)
+        cte_pred, he_pred, img, adv_img = get_state(image_raw, target=target, attack=rudder_target, adv_ptb_prev=adv_img, key=subkey)
         logger.info("----------------------------------------------------------")
         logger.info("CTE: {:.2f} ({:.2f}), HE: {:.2f} ({:.2f})".format(cte_pred, cte_gt, he_pred, he_gt))
         phiDeg = get_control(client, cte_pred, he_pred)
@@ -453,7 +540,8 @@ def simulate_controller_dubins(
         if filtering:
             time_start1 = time.time()
             if settings.STATE_ESTIMATOR == 'tiny_taxinet':
-                img = img.reshape(-1, 1)
+                print(img.shape)
+                # img = img.reshape(-1, 1)
             elif settings.STATE_ESTIMATOR == 'dnn':
                 img = img.reshape(-1, 3, 224, 224)
             # print("Time taken for reshaping: {:.5f}".format(time.time() - time_start1))
@@ -462,15 +550,15 @@ def simulate_controller_dubins(
                 img,
                 settings.ATTACK_STRENGTH
             )
-            state_bounds = hjnnv_filter.state_bounds_from_gt(
-                jnp.array([cte_pred, np.deg2rad(he_pred)]),
-                jnp.array([cte_gt, np.deg2rad(he_gt)])
-            )
+            # state_bounds = hjnnv_filter.state_bounds_from_gt(
+            #     jnp.array([cte_pred, np.deg2rad(he_pred)]),
+            #     jnp.array([cte_gt, np.deg2rad(he_gt)])
+            # )
             # ipdb.set_trace()
             time_nnv = time.time() - time_start2
             # print("Time taken for NNV: {:.5f}".format(time_nnv))
             time_start3 = time.time()
-            v_star, tan_phi_star_rad, worst_val, val_filter = hjnnv_filter.ua_filter(
+            v_star, tan_phi_star_rad, worst_val, val_filter, _, _, _, _, = hjnnv_filter.ua_filter_best_u(
                 jnp.array(np.tan(np.deg2rad(phiDeg))),
                 state_bounds,
                 num_states=15,
@@ -508,9 +596,9 @@ def simulate_controller_dubins(
 
             time_logs = time.time()
             # logger.info("Filter Time: {:.5f}, NNV Time: {:.5f}".format(time_filter, time_nnv))
-            # logger.info("x bounds: {:.2f} <-> {:.2f}, theta bounds: {:.2f} <-> {:.2f}".format(
-            #     state_bounds.lo[0], state_bounds.hi[0], state_bounds.lo[1], state_bounds.hi[1]
-            # ))
+            logger.info("x bounds: {:.2f} <-> {:.2f}, theta bounds: {:.2f} <-> {:.2f}".format(
+                state_bounds.lo[0], state_bounds.hi[0], state_bounds.lo[1], state_bounds.hi[1]
+            ))
             # logger.info("Nominal Value: {:.2f}, Optimal value: {:.2f}".format(val_filter, v_star))
             # logger.info("Control: {:.2f}, Filtered Control: {:.2f}".format(phiDeg, ctrl))
             # logger.info("Filter Time: %.5f, NNV Time: %.5f", time_filter, time_nnv)
@@ -591,6 +679,20 @@ def simulate_controller_dubins(
     ax.axhspan(cte_constr, ymax, color="C0", alpha=0.2)
     ax.axhspan(-cte_constr, ymin, color="C0", alpha=0.2)
     fig.savefig(results_dir + "sim2_plot2d.pdf")
+    plt.show()
+    plt.close(fig)
+    ###############################################3
+    # rudder vs attacked rudder
+    fig, ax = plt.subplots(layout="constrained")
+    ax.plot(T_t, T_rudder, color="C1", label="Attacked")
+    ax.plot(T_t, T_rudder_clean, color="C4", label="Clean")
+    ax.legend()
+    # ymin, ymax = ax.get_ylim()
+    # ymin, ymax = min(ymin, -ylim), max(ymax, ylim)
+    # ax.set_ylim(ymin, ymax)
+    # ax.axhspan(cte_constr, ymax, color="C0", alpha=0.2)
+    # ax.axhspan(-cte_constr, ymin, color="C0", alpha=0.2)
+    fig.savefig(results_dir + "rudder.pdf")
     plt.show()
     plt.close(fig)
 
