@@ -1,15 +1,14 @@
 # Defines settings for collecting training data by running sinusoidal trajectories
 # Written by Sydney Katz (smkatz@stanford.edu)
 import yaml
-import controllers
-import fully_observable
-import pretrained_dnn
-import tiny_taxinet
-import tiny_taxinet2
-import static_atk
-import static_atk_dnn
+from simulators.NASA_ULI_Xplane_Simulator.src.simulation import controllers
+from simulators.NASA_ULI_Xplane_Simulator.src.simulation import fully_observable
+from simulators.NASA_ULI_Xplane_Simulator.src.simulation import pretrained_dnn
+from simulators.NASA_ULI_Xplane_Simulator.src.simulation import tiny_taxinet
+from simulators.NASA_ULI_Xplane_Simulator.src.simulation import tiny_taxinet2
+from simulators.NASA_ULI_Xplane_Simulator.src.simulation import static_atk
+from simulators.NASA_ULI_Xplane_Simulator.src.simulation import static_atk_dnn
 from utils.attacks import fgsm, pgd
-from typing import Callable
 from functools import partial
 
 """ 

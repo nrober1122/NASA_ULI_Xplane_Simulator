@@ -15,7 +15,7 @@ import ipdb
 import time
 import matplotlib.pyplot as plt
 import numpy as np
-import settings
+from simulators.NASA_ULI_Xplane_Simulator.src.simulation import settings
 # import static_atk
 # import tiny_taxinet
 # import tiny_taxinet2
@@ -595,6 +595,7 @@ def simulate_controller_dubins(
             time_start2 = time.time()
             if settings.SMOOTHING:
                 obs = jnp.concatenate([x_hat_prev, u_hat_prev, img])
+
             else:
                 obs = img
             state_bounds = hjnnv_filter.nnv_state_bounds(
@@ -605,7 +606,7 @@ def simulate_controller_dubins(
             lo = jnp.array([state_bounds.lo[0], jnp.deg2rad(state_bounds.lo[1])])
             hi = jnp.array([state_bounds.hi[0], jnp.deg2rad(state_bounds.hi[1])])
             pos_buffer = 1.0
-            heading_buffer = jnp.deg2rad(20.0)
+            heading_buffer = jnp.deg2rad(10.0)
             # else:
             #     pos_buffer = 0
             #     vel_buffer = 0
@@ -660,7 +661,7 @@ def simulate_controller_dubins(
             time_logs = time.time()
             # logger.info("Filter Time: {:.5f}, NNV Time: {:.5f}".format(time_filter, time_nnv))
             logger.info("x bounds: {:.2f} <-> {:.2f}, theta bounds: {:.2f} <-> {:.2f}".format(
-                state_bounds.lo[0], state_bounds.hi[0], state_bounds.lo[1], state_bounds.hi[1]
+                state_bounds.lo[0], state_bounds.hi[0], jnp.rad2deg(state_bounds.lo[1]), jnp.rad2deg(state_bounds.hi[1])
             ))
             # logger.info("Nominal Value: {:.2f}, Optimal value: {:.2f}".format(val_filter, v_star))
             # logger.info("Control: {:.2f}, Filtered Control: {:.2f}".format(phiDeg, ctrl))

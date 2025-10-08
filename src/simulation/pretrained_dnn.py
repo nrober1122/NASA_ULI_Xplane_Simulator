@@ -9,7 +9,7 @@ import numpy as np
 import torch
 import jax
 import jax.numpy as jnp
-from nnet import *
+from simulators.NASA_ULI_Xplane_Simulator.src.simulation.nnet import *
 from PIL import Image
 from torchvision import transforms
 
@@ -24,7 +24,6 @@ with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 USING_TORCH = config["USING_TORCH"]
-DT = config["DT"]
 
 ### IMPORTANT PARAMETERS FOR IMAGE PROCESSING ###
 # width = 224    # Width of image

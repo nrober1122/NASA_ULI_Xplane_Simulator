@@ -147,7 +147,7 @@ def dynamics(x, y, theta, tan_phi_rad, dt=0.05, v=5, L=5):
     # y_dot = v * jnp.cos(theta_rad)
     # theta_dot = (v / L) * jnp.tan(phi_rad)
 
-    x_dot = v * theta_rad
+    x_dot = v * jnp.sin(theta_rad)
     y_dot = v
     theta_dot = (v / L) * tan_phi_rad
 
