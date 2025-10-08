@@ -29,6 +29,8 @@ ATTACK_STRING = config["ATTACK"]        # Will be None if YAML has null
 ATTACK_STRENGTH = config["ATTACK_STRENGTH"]
 TARGET = config["TARGET"]
 FILTER = config["FILTER"]
+CTE_BUFFER = config["CTE_BUFFER"]
+HE_BUFFER = config["HE_BUFFER"]
 
 TIME_OF_DAY = config["TIME_OF_DAY"]
 CLOUD_COVER = config["CLOUD_COVER"]

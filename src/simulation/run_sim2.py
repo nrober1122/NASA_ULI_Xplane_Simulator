@@ -370,8 +370,96 @@ def dynamics(x, y, theta, phi_deg, dt=0.05, v=5, L=5):
     return x_prime, theta_prime, y_prime
 
 
+def save_results(results_dict):
+    T_t = results_dict['T_t']
+    T_state_gt = results_dict['T_state_gt']
+    T_state_clean = results_dict['T_state_clean']
+    T_state_est = results_dict['T_state_est']
+    T_rudder_clean = results_dict['T_rudder_clean']
+    T_rudder = results_dict['T_rudder']
+    T_rudder_filtered = results_dict['T_rudder_filtered']
+    T_image_raw = results_dict['T_image_raw']
+    T_image_clean = results_dict['T_image_clean']
+    T_image_est = results_dict['T_image_est']
+
+    T_state_gt = np.stack(T_state_gt, axis=0)
+    T_state_clean = np.stack(T_state_clean, axis=0)
+    T_state_est = np.stack(T_state_est, axis=0)
+
+    T_image_raw = np.stack(T_image_raw, axis=0)
+    T_image_clean = np.stack(T_image_clean, axis=0)
+    T_image_est = np.stack(T_image_est, axis=0)
+
+    labels = ["CTE (m)", "DTP (m)", "HE (degrees)"]
+    # Plot.
+    fig, axes = plt.subplots(3, layout="constrained")
+    for ii, ax in enumerate(axes):
+        ax.plot(T_t, T_state_gt[:, ii], color="C4", label="True")
+        ax.plot(T_t, T_state_est[:, ii], color="C1", label="Estimated")
+        ax.set_ylabel(labels[ii], rotation=0, ha="right")
+    axes[0].legend()
+    fig.savefig(results_dir + "sim2_traj.pdf")
+    plt.show()
+    plt.close(fig)
+    ###############################################3
+    # x axis = DTP, y axis = CTE.
+    cte_constr = 10.0
+    ylim = 11.0
+    fig, ax = plt.subplots(layout="constrained")
+    ax.plot(T_state_gt[:, 1], T_state_gt[:, 0], marker="o", lw=0.5, color="C1")
+    ax.set_aspect("equal")
+    ymin, ymax = ax.get_ylim()
+    ymin, ymax = min(ymin, -ylim), max(ymax, ylim)
+    ax.set_ylim(ymin, ymax)
+    ax.axhspan(cte_constr, ymax, color="C0", alpha=0.2)
+    ax.axhspan(-cte_constr, ymin, color="C0", alpha=0.2)
+    fig.savefig(results_dir + "sim2_plot2d.pdf")
+    plt.show()
+    plt.close(fig)
+    ###############################################3
+    # rudder vs attacked rudder
+    fig, ax = plt.subplots(layout="constrained")
+    ax.plot(T_t, T_rudder, color="C1", label="Attacked")
+    ax.plot(T_t, T_rudder_clean, color="C4", label="Clean")
+    ax.legend()
+    # ymin, ymax = ax.get_ylim()
+    # ymin, ymax = min(ymin, -ylim), max(ymax, ylim)
+    # ax.set_ylim(ymin, ymax)
+    # ax.axhspan(cte_constr, ymax, color="C0", alpha=0.2)
+    # ax.axhspan(-cte_constr, ymin, color="C0", alpha=0.2)
+    fig.savefig(results_dir + "rudder.pdf")
+    plt.show()
+    plt.close(fig)
+
+    print("Error Metrics:")
+    print("CTE MAE:", np.nanmean(np.abs(T_state_gt[:, 0] - T_state_est[:, 0])))
+    # print("CTE RMSE:", np.nansqrt(np.mean((T_state_gt[:, 0] - T_state_est[:, 0])**2)))
+    print("CTE MaxAE:", np.nanmax(np.abs(T_state_gt[:, 0] - T_state_est[:, 0])))
+    print("HE MAE:", np.nanmean(np.abs(T_state_gt[:, 2] - T_state_est[:, 2])))
+    # print("HE RMSE:", np.nansqrt(np.mean((T_state_gt[:, 2] - T_state_est[:, 2])**2)))
+    print("HE MaxAE:", np.nanmax(np.abs(T_state_gt[:, 2] - T_state_est[:, 2])))
+
+
+    # Save the data.
+    np.savez(
+        results_dir + "sim2_data.npz",
+        T_state_gt=T_state_gt,
+        T_state_clean=T_state_clean,
+        T_state_est=T_state_est,
+        # T_image_raw=T_image_raw,
+        # T_image_clean=T_image_clean,
+        # T_image_est=T_image_est,
+        T_rudder_clean=T_rudder_clean,
+        T_rudder=T_rudder,
+        T_rudder_filtered=T_rudder_filtered,
+    )
+    settings_dict = {k: v for k, v in settings.__dict__.items() if not k.startswith("__") and not callable(v)}
+    with open(results_dir + "settings.json", "w") as f:
+        json.dump(settings_dict, f, indent=2, default=str)
+
+
 def simulate_controller_dubins(
-    client, startCTE, startHE, startDTP, endDTP, get_state, get_control, dt, ctrlEvery, simSpeed=1.0
+    client, startCTE, startHE, startDTP, endDTP, get_state, get_control, dt, ctrlEvery, simSpeed=1.0, results_dict=None
 ):
     """Simulates a controller, overriding the built-in XPlane-11 dynamics to model the aircraft
     as a Dubin's car
@@ -515,10 +603,26 @@ def simulate_controller_dubins(
     endTime = startTime
     run_end_time = now + 30.0
 
-    T_state_gt, T_state_clean, T_state_est = [], [], []
-    T_image_raw = []
-    T_image_clean, T_image_est = [], []
-    T_rudder_clean, T_rudder, T_rudder_filtered = [], [], []
+    if results_dict is not None:
+        print("Resuming from previous results dict")
+        T_t = results_dict['T_t']
+        T_state_gt = results_dict['T_state_gt']
+        T_state_clean = results_dict['T_state_clean']
+        T_state_est = results_dict['T_state_est']
+        T_rudder_clean = results_dict['T_rudder_clean']
+        T_rudder = results_dict['T_rudder']
+        T_rudder_filtered = results_dict['T_rudder_filtered']
+        T_image_raw = results_dict['T_image_raw']
+        T_image_clean = results_dict['T_image_clean']
+        T_image_est = results_dict['T_image_est']
+    else:
+        print("Starting new results dict")
+        T_state_gt, T_state_clean, T_state_est = [], [], []
+        T_image_raw = []
+        T_image_clean, T_image_est = [], []
+        T_rudder_clean, T_rudder, T_rudder_filtered = [], [], []
+    
+    # ipdb.set_trace()
 
     cte_gt, dtp_gt, he_gt = xpc3_helper.getHomeState(client)
     cte_dym, dtp_dym, he_dym = cte_gt, dtp_gt, he_gt
@@ -532,6 +636,7 @@ def simulate_controller_dubins(
 
     cte_pred, he_pred = cte_clean, he_clean
     ctrl_h = 0.0
+    init_sim_len = len(T_state_gt)
 
 
     def rudder_target(pos, target_rudder=-1.0):
@@ -547,6 +652,7 @@ def simulate_controller_dubins(
         cte_gt, dtp_gt, he_gt = xpc3_helper.getHomeState(client)
         state_gt = np.array([cte_gt, dtp_gt, he_gt])
         T_state_gt.append(state_gt)
+        print(len(T_state_gt))
 
         image_raw = get_xplane_image()
         T_image_raw.append(image_raw)
@@ -605,14 +711,14 @@ def simulate_controller_dubins(
 
             lo = jnp.array([state_bounds.lo[0], jnp.deg2rad(state_bounds.lo[1])])
             hi = jnp.array([state_bounds.hi[0], jnp.deg2rad(state_bounds.hi[1])])
-            pos_buffer = 1.0
-            heading_buffer = jnp.deg2rad(10.0)
+            cte_buffer = settings.CTE_BUFFER
+            heading_buffer = jnp.deg2rad(settings.HE_BUFFER)
             # else:
             #     pos_buffer = 0
             #     vel_buffer = 0
             state_bounds = hj.sets.Box(
-                lo=lo - jnp.array([pos_buffer, heading_buffer]),
-                hi=hi + jnp.array([pos_buffer, heading_buffer])
+                lo=lo - jnp.array([cte_buffer, heading_buffer]),
+                hi=hi + jnp.array([cte_buffer, heading_buffer])
             )
             # state_bounds = hjnnv_filter.state_bounds_from_gt(
             #     jnp.array([cte_pred, np.deg2rad(he_pred)]),
@@ -709,74 +815,39 @@ def simulate_controller_dubins(
 
     client.pauseSim(True)
 
-    T_t = np.arange(len(T_state_gt)) * dt
 
-    T_state_gt = np.stack(T_state_gt, axis=0)
-    T_state_clean = np.stack(T_state_clean, axis=0)
-    T_state_est = np.stack(T_state_est, axis=0)
 
-    T_image_raw = np.stack(T_image_raw, axis=0)
-    T_image_clean = np.stack(T_image_clean, axis=0)
-    T_image_est = np.stack(T_image_est, axis=0)
+    if results_dict is None:
+        T_t = np.arange(len(T_state_gt)) * dt
+        T_t = np.concatenate([T_t, np.array([np.nan])])
+    else:
+        T_t_ = np.arange(len(T_state_gt) - init_sim_len) * dt
+        T_t = np.concatenate([results_dict['T_t'], T_t_, np.array([np.nan])])
 
-    labels = ["CTE (m)", "DTP (m)", "HE (degrees)"]
-    # Plot.
-    fig, axes = plt.subplots(3, layout="constrained")
-    for ii, ax in enumerate(axes):
-        ax.plot(T_t, T_state_gt[:, ii], color="C4", label="True")
-        ax.plot(T_t, T_state_est[:, ii], color="C1", label="Estimated")
-        ax.set_ylabel(labels[ii], rotation=0, ha="right")
-    axes[0].legend()
-    fig.savefig(results_dir + "sim2_traj.pdf")
-    plt.show()
-    plt.close(fig)
-    ###############################################3
-    # x axis = DTP, y axis = CTE.
-    cte_constr = 10.0
-    ylim = 11.0
-    fig, ax = plt.subplots(layout="constrained")
-    ax.plot(T_state_gt[:, 1], T_state_gt[:, 0], marker="o", lw=0.5, color="C1")
-    ax.set_aspect("equal")
-    ymin, ymax = ax.get_ylim()
-    ymin, ymax = min(ymin, -ylim), max(ymax, ylim)
-    ax.set_ylim(ymin, ymax)
-    ax.axhspan(cte_constr, ymax, color="C0", alpha=0.2)
-    ax.axhspan(-cte_constr, ymin, color="C0", alpha=0.2)
-    fig.savefig(results_dir + "sim2_plot2d.pdf")
-    plt.show()
-    plt.close(fig)
-    ###############################################3
-    # rudder vs attacked rudder
-    fig, ax = plt.subplots(layout="constrained")
-    ax.plot(T_t, T_rudder, color="C1", label="Attacked")
-    ax.plot(T_t, T_rudder_clean, color="C4", label="Clean")
-    ax.legend()
-    # ymin, ymax = ax.get_ylim()
-    # ymin, ymax = min(ymin, -ylim), max(ymax, ylim)
-    # ax.set_ylim(ymin, ymax)
-    # ax.axhspan(cte_constr, ymax, color="C0", alpha=0.2)
-    # ax.axhspan(-cte_constr, ymin, color="C0", alpha=0.2)
-    fig.savefig(results_dir + "rudder.pdf")
-    plt.show()
-    plt.close(fig)
+    T_state_gt.append([np.nan]*state_gt.shape[0])
+    T_state_clean.append([np.nan]*state_gt.shape[0])
+    T_state_est.append([np.nan]*state_gt.shape[0])
+    T_rudder_clean.append(np.nan)
+    T_rudder.append(np.nan)
+    T_rudder_filtered.append(np.nan)
 
-    # Save the data.
-    np.savez(
-        results_dir + "sim2_data.npz",
-        T_state_gt=T_state_gt,
-        T_state_clean=T_state_clean,
-        T_state_est=T_state_est,
-        # T_image_raw=T_image_raw,
-        # T_image_clean=T_image_clean,
-        # T_image_est=T_image_est,
-        T_rudder_clean=T_rudder_clean,
-        T_rudder=T_rudder,
-        T_rudder_filtered=T_rudder_filtered,
-    )
-    settings_dict = {k: v for k, v in settings.__dict__.items() if not k.startswith("__") and not callable(v)}
-    with open(results_dir + "settings.json", "w") as f:
-        json.dump(settings_dict, f, indent=2, default=str)
-    
+    results_dict = {
+        "results_dir": results_dir,
+        "T_t": T_t,
+        "T_state_gt": T_state_gt,
+        "T_state_clean": T_state_clean,
+        "T_state_est": T_state_est,
+        "T_image_raw": T_image_raw,
+        "T_image_clean": T_image_clean,
+        "T_image_est": T_image_est,
+        "T_rudder_clean": T_rudder_clean,
+        "T_rudder": T_rudder,
+        "T_rudder_filtered": T_rudder_filtered
+    }
+
+    save_results(results_dict)
+
+    return results_dict
 
 
 if __name__ == "__main__":
