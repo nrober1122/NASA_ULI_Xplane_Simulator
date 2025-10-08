@@ -23,6 +23,7 @@ from torchvision import models
 
 '''
 
+
 class TinyTaxiNetDNN(nn.Module):
     def __init__(self, model_name="TinyTaxiNet"):
         super(TinyTaxiNetDNN, self).__init__()
@@ -42,6 +43,4 @@ class TinyTaxiNetDNN(nn.Module):
         x = self.fc4(x)
 
         return x
-
-
 

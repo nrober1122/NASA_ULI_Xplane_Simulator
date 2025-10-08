@@ -24,6 +24,7 @@ with open("config.yaml", "r") as f:
     config = yaml.safe_load(f)
 
 USING_TORCH = config["USING_TORCH"]
+DT = config["DT"]
 
 ### IMPORTANT PARAMETERS FOR IMAGE PROCESSING ###
 # width = 224    # Width of image

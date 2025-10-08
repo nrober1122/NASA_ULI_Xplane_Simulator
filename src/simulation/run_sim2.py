@@ -42,7 +42,15 @@ import matplotlib.pyplot as plt
 jax.config.update('jax_platform_name', 'cpu')
 
 
-def get_state(image_raw: np.ndarray, attack: Callable = None, target: jnp.ndarray = None, adv_ptb_prev=None, key=None):
+def get_state(
+        image_raw: np.ndarray,
+        x_prev: jnp.ndarray = None,
+        u_prev: jnp.ndarray = None,
+        attack: Callable = None,
+        target: jnp.ndarray = None,
+        adv_ptb_prev=None,
+        key=None
+        ):
     # Process image before passing it to NN estimator
     image_processed = settings.PROCESS_IMG(image_raw)
     image_processed_jnp = jnp.array(image_processed)
@@ -108,7 +116,14 @@ def get_state(image_raw: np.ndarray, attack: Callable = None, target: jnp.ndarra
         raise ValueError("Attack type not recognized")
 
     # Estimate state from processed image
-    cte, he = settings.GET_STATE(image_processed)
+
+    if settings.SMOOTHING and x_prev is not None:
+        print("Using smoothing with alpha =", settings.SMOOTHING_ALPHA)
+        observation = jnp.concatenate([x_prev, u_prev, image_processed])
+        cte, he = settings.GET_STATE_SMOOTHED(observation)
+    else:
+        observation = image_processed
+        cte, he = settings.GET_STATE(observation)
 
     image_attacked_jnp = jnp.array(image_processed)
     if attack is not None and settings.ATTACK_STRING != 'null':
@@ -409,25 +424,36 @@ def simulate_controller_dubins(
     xpc3_helper.reset(client, cteInit=startCTE, heInit=startHE, dtpInit=startDTP)
     xpc3_helper.sendBrake(client, 0)
     key = jax.random.PRNGKey(0)
+    settings.NETWORK()  # Initialize the network once before starting the sim loop
 
     if settings.FILTER:
         grid = hj.Grid.from_lattice_parameters_and_boundary_conditions(
             hj.sets.Box(
-                np.array([-18., -np.pi/4]),
-                np.array([18., np.pi/4])),
+                np.array([-18., -np.pi/3]),
+                np.array([18., np.pi/3])),
             (100, 100),
         )
         values = -jnp.abs(grid.states[..., 0]) + 10.0
 
         # Set up the uncertainty-aware filter
-        hjnnv_filter = hjnnvUncertaintyAwareFilter(
-            dynamic_models.TaxiNetDynamics(dt=settings.DT),
-            pred_model=settings.NETWORK(),
-            grid=grid,
-            initial_values=values,
-            num_controls=30,
-            num_disturbances=15,
-        )
+        if settings.SMOOTHING:
+            hjnnv_filter = hjnnvUncertaintyAwareFilter(
+                dynamic_models.TaxiNetDynamics(dt=settings.DT),
+                pred_model=settings.GET_STATE_SMOOTHED,
+                grid=grid,
+                initial_values=values,
+                num_controls=30,
+                num_disturbances=15,
+            )
+        else:
+            hjnnv_filter = hjnnvUncertaintyAwareFilter(
+                dynamic_models.TaxiNetDynamics(dt=settings.DT),
+                pred_model=settings.NETWORK(),
+                grid=grid,
+                initial_values=values,
+                num_controls=30,
+                num_disturbances=15,
+            )
 
         # Use random calculations to jit compile things before the main loop
         v_star, u_star, worst_val, val_filter, _, _, _, _ = hjnnv_filter.ua_filter_best_u(
@@ -439,12 +465,28 @@ def simulate_controller_dubins(
                 num_states=10,
         )
         if settings.STATE_ESTIMATOR == 'tiny_taxinet':
-            dummy_input = jnp.zeros((128,))
+            if settings.SMOOTHING:
+                dummy_input = jnp.zeros((2 + 1 + 128,))
+            else:
+                dummy_input = jnp.zeros((128,))
+
         elif settings.STATE_ESTIMATOR == 'dnn':
             dummy_input = jnp.zeros((1, 3, 224, 224))
         elif settings.STATE_ESTIMATOR == 'cnn64':
             dummy_input = jnp.zeros((1, 1, 64, 64))
 
+        # p = settings.NETWORK()   # or settings.GET_STATE_SMOOTHED
+        # print("pred_model callable?", callable(p))
+        # # If pred_model is a closure, try:
+        # try:
+        #     from inspect import getsource
+        #     print(getsource(p))
+        # except Exception:
+        #     pass
+        # # Check dummy input is concrete
+        # print("dummy_input type:", type(dummy_input), "dtype:", getattr(dummy_input, "dtype", None))
+
+        # with jax.checking_leaks():
         state_bounds = hjnnv_filter.nnv_state_bounds(
             dummy_input,
             0.03
@@ -471,7 +513,7 @@ def simulate_controller_dubins(
     startTime = client.getDREF("sim/time/zulu_time_sec")[0]
     now = startTime
     endTime = startTime
-    run_end_time = now + 50.0
+    run_end_time = now + 30.0
 
     T_state_gt, T_state_clean, T_state_est = [], [], []
     T_image_raw = []
@@ -488,6 +530,9 @@ def simulate_controller_dubins(
     cte_clean, he_clean, img_clean, adv_image = get_state(image_raw)
     adv_img = jnp.zeros_like(img_clean)
 
+    cte_pred, he_pred = cte_clean, he_clean
+    ctrl_h = 0.0
+
 
     def rudder_target(pos, target_rudder=-1.0):
         cte, he = pos
@@ -496,6 +541,8 @@ def simulate_controller_dubins(
 
     while dtp < endDTP and now < run_end_time and np.abs(cte_gt) < 10.5:
         simLoopTimer = time.time()
+        x_hat_prev = jnp.array([cte_pred, he_pred])
+        u_hat_prev = jnp.array([jnp.tan(jnp.deg2rad(ctrl_h))])
         # Get ground truth state
         cte_gt, dtp_gt, he_gt = xpc3_helper.getHomeState(client)
         state_gt = np.array([cte_gt, dtp_gt, he_gt])
@@ -526,7 +573,7 @@ def simulate_controller_dubins(
 
         print("Target for attack:", target)
         key, subkey = jax.random.split(key)
-        cte_pred, he_pred, img, adv_img = get_state(image_raw, target=target, attack=rudder_target, adv_ptb_prev=adv_img, key=subkey)
+        cte_pred, he_pred, img, adv_img = get_state(image_raw, x_prev=x_hat_prev, u_prev=u_hat_prev, target=target, attack=rudder_target, adv_ptb_prev=adv_img, key=subkey)
         logger.info("----------------------------------------------------------")
         logger.info("CTE: {:.2f} ({:.2f}), HE: {:.2f} ({:.2f})".format(cte_pred, cte_gt, he_pred, he_gt))
         phiDeg = get_control(client, cte_pred, he_pred)
@@ -546,9 +593,25 @@ def simulate_controller_dubins(
                 img = img.reshape(-1, 3, 224, 224)
             # print("Time taken for reshaping: {:.5f}".format(time.time() - time_start1))
             time_start2 = time.time()
+            if settings.SMOOTHING:
+                obs = jnp.concatenate([x_hat_prev, u_hat_prev, img])
+            else:
+                obs = img
             state_bounds = hjnnv_filter.nnv_state_bounds(
-                img,
+                obs,
                 settings.ATTACK_STRENGTH
+            )
+
+            lo = jnp.array([state_bounds.lo[0], jnp.deg2rad(state_bounds.lo[1])])
+            hi = jnp.array([state_bounds.hi[0], jnp.deg2rad(state_bounds.hi[1])])
+            pos_buffer = 1.0
+            heading_buffer = jnp.deg2rad(20.0)
+            # else:
+            #     pos_buffer = 0
+            #     vel_buffer = 0
+            state_bounds = hj.sets.Box(
+                lo=lo - jnp.array([pos_buffer, heading_buffer]),
+                hi=hi + jnp.array([pos_buffer, heading_buffer])
             )
             # state_bounds = hjnnv_filter.state_bounds_from_gt(
             #     jnp.array([cte_pred, np.deg2rad(he_pred)]),

@@ -23,10 +23,14 @@ with open("config.yaml", "r") as f:
 DUBINS = config["DUBINS"]
 STATE_ESTIMATOR = config["STATE_ESTIMATOR"]
 USING_TORCH = config["USING_TORCH"]
+SMOOTHING = config["SMOOTHING"]
+SMOOTHING_ALPHA = config["SMOOTHING_ALPHA"]
+
 ATTACK_STRING = config["ATTACK"]        # Will be None if YAML has null
 ATTACK_STRENGTH = config["ATTACK_STRENGTH"]
 TARGET = config["TARGET"]
 FILTER = config["FILTER"]
+
 TIME_OF_DAY = config["TIME_OF_DAY"]
 CLOUD_COVER = config["CLOUD_COVER"]
 START_CTE = config["START_CTE"]
@@ -50,47 +54,6 @@ CTRL_EVERY = config["CTRL_EVERY"]
 # STATE_ESTIMATOR = 'dnn'
 # USING_TORCH = True
 
-# # Type of adversarial attack
-# # None                  - No adversarial attack
-# # static_atk.get_patch  - patch generated for tiny taxinet
-
-# ATTACK = None
-# # ATTACK = static_atk
-# # ATTACK = static_atk_dnn
-# ATTACK_STRENGTH = 0.035
-
-# FILTER = False
-
-# # Time of day in local time, e.g. 8.0 = 8AM, 17.0 = 5PM
-# TIME_OF_DAY = 8.0
-
-# # Cloud cover (higher numbers are cloudier/darker)
-# # 0 = Clear, 1 = Cirrus, 2 = Scattered, 3 = Broken, 4 = Overcast
-# CLOUD_COVER = 0
-
-# # Starting crosstrack error in meters
-# START_CTE = 6.0
-
-# # Starting heading error in degrees
-# START_HE = 0.0
-
-# # Starting downtrack position in meters
-# START_DTP = 322.0
-
-# # Downtrack positions (in meters) to end the simulation
-# END_DTP = 522.0
-
-# """
-# Parameters for Dubin's Model
-# """
-
-# # Time steps for the dynamics in seconds
-# DT = 0.1
-
-# # Frequency to get new control input 
-# # (e.g. if DT=0.05, CTRL_EVERY should be set to 20 to perform control at a 1 Hz rate)
-# CTRL_EVERY = 1
-
 """
 Other parameters
     - NOTE: you should not need to change any of these unless you want to create
@@ -106,6 +69,7 @@ else:
 # Tells simulator which function to use to estimate the state
 if STATE_ESTIMATOR == 'tiny_taxinet':
     PROCESS_IMG = tiny_taxinet.process_image
+    GET_STATE_SMOOTHED = partial(tiny_taxinet2.evaluate_network_smoothed, alpha=SMOOTHING_ALPHA)
     GET_STATE = tiny_taxinet2.evaluate_network
     NETWORK = tiny_taxinet2.get_network
 elif STATE_ESTIMATOR == 'fully_observable':

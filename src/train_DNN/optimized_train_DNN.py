@@ -42,7 +42,7 @@ torch.cuda.empty_cache()
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 print('found device: ', device)
 
-model = TaxiNetCNN()
+model = TaxiNetCNN(input_channels=1, H=64, W=64)
 
 # # load the pre-trained model
 # if device.type == 'cpu':
@@ -246,11 +246,14 @@ if __name__=='__main__':
     train_dir = BASE_DATALOADER_DIR + '/' + condition + '_train'
     val_dir = BASE_DATALOADER_DIR + '/' + condition + '_validation'
 
-    train_options = {"epochs": 10,
+    train_options = {"epochs": 1,
                      "learning_rate": 1e-3,
                      "results_dir": results_dir,
                      "train_dir": train_dir,
-                     "val_dir": val_dir
+                     "val_dir": val_dir,
+                     "image_width": 64,
+                     "image_height": 64,
+                     "grayscale": True,
                      }
 
     dataloader_params = {'batch_size': 512,
@@ -261,8 +264,18 @@ if __name__=='__main__':
 
     # DATALOADERS
     # instantiate the model and freeze all but penultimate layers
-    train_dataset = TaxiNetDataset(train_options['train_dir'])
-    val_dataset = TaxiNetDataset(train_options['val_dir'])
+    train_dataset = TaxiNetDataset(
+        train_options['train_dir'],
+        IMAGE_WIDTH=train_options['image_width'],
+        IMAGE_HEIGHT=train_options['image_height'],
+        grayscale=train_options['grayscale']
+    )
+    val_dataset = TaxiNetDataset(
+        train_options['val_dir'],
+        IMAGE_WIDTH=train_options['image_width'],
+        IMAGE_HEIGHT=train_options['image_height'],
+        grayscale=train_options['grayscale']
+    )
 
     train_loader = DataLoader(train_dataset, **dataloader_params)
     val_loader = DataLoader(val_dataset, **dataloader_params)

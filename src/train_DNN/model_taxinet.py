@@ -45,20 +45,25 @@ class TaxiNetCNN(nn.Module):
     """
     def __init__(self, input_channels=3, H=224, W=224):
         super(TaxiNetCNN, self).__init__()
-        print("Using TinyTaxiNetCNN")
+        # print("Using TaxiNetCNN")
         # Two lightweight conv layers; strides chosen to keep FC size small.
         self.conv1 = nn.Conv2d(input_channels, 16, kernel_size=4, stride=4, padding=0)  # -> 56x56
         self.conv2 = nn.Conv2d(16, 32, kernel_size=4, stride=4, padding=0)              # -> 14x14
 
-        # Compute flatten size analytically for the given H, W
-        def out_dim(n, k, s, p, d=1):
-            return (n + 2*p - d*(k - 1) - 1) // s + 1
+        # # Compute flatten size analytically for the given H, W
+        # def out_dim(n, k, s, p, d=1):
+        #     return (n + 2*p - d*(k - 1) - 1) // s + 1
 
-        h1 = out_dim(H, 5, 4, 2)
-        w1 = out_dim(W, 5, 4, 2)
-        h2 = out_dim(h1, 3, 4, 1)
-        w2 = out_dim(w1, 3, 4, 1)
-        flatten_size = 32 * h2 * w2  # 32 * 14 * 14 = 6272 for 224x224
+        # h1 = out_dim(H, 5, 4, 2)
+        # w1 = out_dim(W, 5, 4, 2)
+        # h2 = out_dim(h1, 3, 4, 1)
+        # w2 = out_dim(w1, 3, 4, 1)
+        # flatten_size = 32 * h2 * w2  # 32 * 14 * 14 = 6272 for 224x224
+        with torch.no_grad():
+            dummy = torch.zeros(1, input_channels, H, W)
+            x = F.relu(self.conv1(dummy))
+            x = F.relu(self.conv2(x))
+            flatten_size = x.numel() // x.shape[0]  # num features per sample
 
         # MLP head
         self.fc1 = nn.Linear(flatten_size, 64)

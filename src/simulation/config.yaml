@@ -8,10 +8,13 @@ ATTACK: fgsm   # null means None in YAML
 # ATTACK options could be: null, static_atk, static_atk_dnn, fgsm, pgd
 # ATTACK_STRENGTH: 0.049
 # ATTACK_STRENGTH: 0.0005
-ATTACK_STRENGTH: 0.015
+SMOOTHING: true
+SMOOTHING_ALPHA: 0.2
+
+ATTACK_STRENGTH: 0.0204
 TARGET: 7.0
 # ATTACK_STRENGTH: 0.005
-FILTER: false
+FILTER: true
 
 TIME_OF_DAY: 8.0
 CLOUD_COVER: 0
