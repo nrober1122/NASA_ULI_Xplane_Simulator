@@ -396,8 +396,9 @@ def save_results(results_dict):
     for ii, ax in enumerate(axes):
         ax.plot(T_t, T_state_gt[:, ii], color="C4", label="True")
         ax.plot(T_t, T_state_est[:, ii], color="C1", label="Estimated")
+        ax.plot(T_t, T_state_clean[:, ii], color="C0", label="No attack")
         ax.set_ylabel(labels[ii], rotation=0, ha="right")
-    axes[0].legend()
+    axes[2].legend()
     fig.savefig(results_dir + "sim2_traj.pdf")
     plt.show()
     plt.close(fig)
