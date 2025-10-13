@@ -387,6 +387,8 @@ def save_results(results_dict):
     T_state_bounds = results_dict.get('T_state_bounds', None)
     lows = np.array([bound.lo for bound in T_state_bounds])
     highs = np.array([bound.hi for bound in T_state_bounds])
+    lows_ = lows + np.array([settings.CTE_BUFFER, jnp.deg2rad(settings.HE_BUFFER)])
+    highs_ = highs - np.array([settings.CTE_BUFFER, jnp.deg2rad(settings.HE_BUFFER)])
 
     T_state_gt = np.stack(T_state_gt, axis=0)
     T_state_clean = np.stack(T_state_clean, axis=0)
@@ -416,10 +418,13 @@ def save_results(results_dict):
         if ii == 1:
             lows[:, ii] = np.rad2deg(lows[:, ii])
             highs[:, ii] = np.rad2deg(highs[:, ii])
-        ax.fill_between(T_t, lows[:, ii], highs[:, ii], color=teal, alpha=0.4, label="State bounds" if ii == 0 else None)
+            lows_[:, ii] = np.rad2deg(lows_[:, ii])
+            highs_[:, ii] = np.rad2deg(highs_[:, ii])
+        ax.fill_between(T_t, lows[:, ii], highs[:, ii], color=light_teal, alpha=0.4, label="State bounds" if ii == 0 else None)
+        ax.fill_between(T_t, lows_[:, ii], highs_[:, ii], color=teal, alpha=0.4, label="Filtered bounds" if ii == 0 else None)
         ax.set_ylabel(labels[ii], rotation=0, ha="right")
     axes[0].legend()
-    # fig.savefig(results_dir + "sim2_traj.pdf")
+    fig.savefig(results_dir + "sim2_traj.pdf")
     plt.show()
     plt.close(fig)
     # fig, axes = plt.subplots(3, layout="constrained")
@@ -693,10 +698,11 @@ def simulate_controller_dubins(
         #     target = jnp.array([0.0, 0.0])
 
         # This is what I've been using - does work
-        # target = 2 - 7/10 * (cte_gt - 10)
+        target = 2 - 7/10 * (cte_gt - 10)
+        # target = settings.TARGET
 
         # Testing
-        target = 7 - 6/(1+np.exp(-(1.0*cte_gt-7)))  # sigmoid curve from 0 to 7 as cte goes from -inf to +inf
+        # target = 7 - 6/(1+np.exp(-(1.0*cte_gt-7)))  # sigmoid curve from 0 to 7 as cte goes from -inf to +inf
         # target = np.clip(2 - 7/10 * (cte_gt - 10), -7.0, 7.0)
         # target = 7 - 5/(1+np.exp(-(1.0*cte_gt-7)))  # sigmoid curve from 0 to 7 as cte goes from -inf to +inf
         # target = 7.0

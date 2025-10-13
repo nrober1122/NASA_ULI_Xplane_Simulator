@@ -38,16 +38,18 @@ def plot_sim(data_dir, plot_type):
 
     
 def plot_states(data, settings):
-    T_state_gt = np.stack(data['T_state_gt'][:-1], axis=0)[:, [0, 2]]
-    T_state_est = np.stack(data['T_state_est'][:-1], axis=0)[:, [0, 2]]
-    T_state_clean = np.stack(data['T_state_clean'][:-1], axis=0)[:, [0, 2]]
-    T_rudder = np.stack(data['T_rudder'][:-1], axis=0)
+    T_state_gt = np.stack(data['T_state_gt'], axis=0)[:, [0, 2]]
+    T_state_est = np.stack(data['T_state_est'], axis=0)[:, [0, 2]]
+    T_state_clean = np.stack(data['T_state_clean'], axis=0)[:, [0, 2]]
+    T_rudder = np.stack(data['T_rudder'], axis=0)
     # T_rudder_filtered = np.stack(data['T_rudder_filtered'][:-1], axis=0)
     T_state_bounds = data.get('T_state_bounds', [])
 
     lows = np.array([bound.lo for bound in T_state_bounds])
     highs = np.array([bound.hi for bound in T_state_bounds])
-    # import ipdb; ipdb.set_trace()
+    lows_ = lows + np.array([settings["CTE_BUFFER"], np.deg2rad(settings["HE_BUFFER"])])
+    highs_ = highs - np.array([settings["CTE_BUFFER"], np.deg2rad(settings["HE_BUFFER"])])
+
 
     T_t = np.arange(T_state_gt.shape[0]) * settings["DT"]
     labels = ["CTE (m)", "HE (degrees)"]
@@ -57,11 +59,17 @@ def plot_states(data, settings):
         ax.plot(T_t, T_state_gt[:, ii], color=dark_teal, label="True", linewidth=1)
         ax.plot(T_t, T_state_est[:, ii], color=pink, label="Estimated", linewidth=1)
         ax.plot(T_t, T_state_clean[:, ii], color=purple, label="No attack", linewidth=1)
+        if ii == 0:
+            ax.plot(T_t, -10*np.ones_like(T_t), color=black, label="Safe Boundary", linewidth=1, linestyle='--')
+            ax.plot(T_t, 10*np.ones_like(T_t), color=black, linewidth=1, linestyle='--')
         if ii == 1:
             lows[:, ii] = np.rad2deg(lows[:, ii])
             highs[:, ii] = np.rad2deg(highs[:, ii])
-        ax.fill_between(T_t, lows[:, ii], highs[:, ii], color=teal, alpha=0.4, label="No attack ±1 SD" if ii == 0 else None)
-
+            lows_[:, ii] = np.rad2deg(lows_[:, ii])
+            highs_[:, ii] = np.rad2deg(highs_[:, ii])
+        ax.fill_between(T_t, lows[:, ii], highs[:, ii], color=light_teal, alpha=0.4, label="Inflated Bounds" if ii == 0 else None)
+        ax.fill_between(T_t, lows_[:, ii], highs_[:, ii], color=teal, alpha=0.4, label="NNV Bounds" if ii == 0 else None)
+        
 
         # ax.plot(T_t, T_state_gt[:, ii]+2, color=rgb_colors[1], label="True", linewidth=4)
         # ax.plot(T_t, T_state_gt[:, ii]+4, color=rgb_colors[2], label="True", linewidth=4)
@@ -84,11 +92,11 @@ def plot_states(data, settings):
     # import ipdb; ipdb.set_trace()
 
 def plot_trajectory(data, settings):
-    T_state_gt = data['T_state_gt'][:-1][:, [0, 2]]
-    T_state_est = data['T_state_est'][:-1][:, [0, 2]]
-    T_state_clean = data['T_state_clean'][:-1][:, [0, 2]]
-    T_rudder = data['T_rudder'][:-1]
-    T_rudder_filtered = data['T_rudder_filtered'][:-1]
+    T_state_gt = data['T_state_gt'][:, [0, 2]]
+    T_state_est = data['T_state_est'][:, [0, 2]]
+    T_state_clean = data['T_state_clean'][:, [0, 2]]
+    T_rudder = data['T_rudder']
+    T_rudder_filtered = data['T_rudder_filtered']
 
     T_t = np.arange(T_state_gt.shape[0]) * settings["DT"]
     labels = ["CTE (m)", "HE (degrees)"]

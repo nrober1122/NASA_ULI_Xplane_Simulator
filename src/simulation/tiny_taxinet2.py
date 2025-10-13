@@ -169,6 +169,7 @@ def dynamics(x, y, theta, tan_phi_rad, dt=0.05, v=5, L=5):
     theta2 = theta_rad * theta_rad
     theta3 = theta2 * theta_rad
     theta5 = theta3 * theta2
+    theta7 = theta5 * theta2
     # phi_rad = jnp.deg2rad(phi_deg)
 
     # x_dot = v * jnp.sin(theta_rad)
@@ -176,7 +177,7 @@ def dynamics(x, y, theta, tan_phi_rad, dt=0.05, v=5, L=5):
     # theta_dot = (v / L) * jnp.tan(phi_rad)
 
     # x_dot = v * jnp.sin(theta_rad)
-    x_dot = v * (theta_rad - theta3 / 6 + theta5 / 120)  # Taylor approx for small angles
+    x_dot = v * (theta_rad - theta3 / 6 + theta5 / 120 - theta7 / 5040)  # Taylor approx for small angles
     # x_dot = v * theta_rad
     # x_dot = v * 1.1*jnp.tanh(theta_rad*0.99)
     # x_dot = v * 2.2*jax.nn.sigmoid(2*theta_rad) - 1.1
