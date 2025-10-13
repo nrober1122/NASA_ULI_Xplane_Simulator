@@ -126,6 +126,31 @@ def evaluate_network(image: np.ndarray):
         return pred
 
 
+def dynamics_sin(x, y, theta, tan_phi_rad, dt=0.05, v=5, L=5):
+    """Dubin's car dynamics model (returns next state)
+
+    Args:
+        x: current crosstrack error (meters)
+        y: current downtrack position (meters)
+        theta: current heading error (degrees)
+        phi_deg: steering angle input (degrees)
+        -------------------------------
+        dt: time step (seconds)
+        v: speed (m/s)
+        L: distance between front and back wheels (meters)
+    """
+
+    theta_rad = jnp.deg2rad(theta)
+
+    x_dot = v * jnp.sin(theta_rad)
+    theta_dot = (v / L) * tan_phi_rad
+
+    x_prime = x + x_dot * dt
+    theta_prime = theta + jnp.rad2deg(theta_dot) * dt
+
+    return jnp.array([x_prime, theta_prime])
+
+
 def dynamics(x, y, theta, tan_phi_rad, dt=0.05, v=5, L=5):
     """Dubin's car dynamics model (returns next state)
 
@@ -141,18 +166,23 @@ def dynamics(x, y, theta, tan_phi_rad, dt=0.05, v=5, L=5):
     """
 
     theta_rad = jnp.deg2rad(theta)
+    theta2 = theta_rad * theta_rad
+    theta3 = theta2 * theta_rad
+    theta5 = theta3 * theta2
     # phi_rad = jnp.deg2rad(phi_deg)
 
     # x_dot = v * jnp.sin(theta_rad)
     # y_dot = v * jnp.cos(theta_rad)
     # theta_dot = (v / L) * jnp.tan(phi_rad)
 
-    x_dot = v * jnp.sin(theta_rad)
-    y_dot = v
+    # x_dot = v * jnp.sin(theta_rad)
+    x_dot = v * (theta_rad - theta3 / 6 + theta5 / 120)  # Taylor approx for small angles
+    # x_dot = v * theta_rad
+    # x_dot = v * 1.1*jnp.tanh(theta_rad*0.99)
+    # x_dot = v * 2.2*jax.nn.sigmoid(2*theta_rad) - 1.1
     theta_dot = (v / L) * tan_phi_rad
 
     x_prime = x + x_dot * dt
-    y_prime = y + y_dot * dt
     theta_prime = theta + jnp.rad2deg(theta_dot) * dt
 
     return jnp.array([x_prime, theta_prime])
@@ -172,7 +202,9 @@ def evaluate_network_smoothed(observation: jnp.ndarray, alpha=0.7):
     assert USING_TORCH is False, "Smoothing only implemented for JAX version"
     assert observation.shape == (131,)
 
-    prev_x_hat = observation[:2]
+    # prev_x_hat = observation[:2]
+    prev_cte = observation[0]
+    prev_he = observation[1]
     prev_phi = observation[2]
     image = observation[3:]
     # import ipdb; ipdb.set_trace()
@@ -181,9 +213,9 @@ def evaluate_network_smoothed(observation: jnp.ndarray, alpha=0.7):
 
     state_hat_nn = _network(image).squeeze()
     state_hat_dyn = dynamics(
-        prev_x_hat[0],
+        prev_cte,
         0.0,
-        prev_x_hat[1],
+        prev_he,
         prev_phi,
         dt=DT,
     )

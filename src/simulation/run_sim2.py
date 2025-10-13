@@ -2,6 +2,8 @@ import os
 import sys
 from datetime import datetime
 
+import pypalettes
+
 xpc3_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/src/"
 results_dir = os.environ["NASA_ULI_DATA_DIR"] + "/logs/LOG_" + datetime.now().strftime("%Y%m%d_%H_%M_%S") + "/"
 os.makedirs(results_dir, exist_ok=True)
@@ -36,6 +38,7 @@ from utils.attacks import fgsm, pgd
 import dynamic_models
 import tiny_taxinet2
 import json
+import pickle
 
 import matplotlib.pyplot as plt
 
@@ -378,30 +381,57 @@ def save_results(results_dict):
     T_rudder_clean = results_dict['T_rudder_clean']
     T_rudder = results_dict['T_rudder']
     T_rudder_filtered = results_dict['T_rudder_filtered']
-    T_image_raw = results_dict['T_image_raw']
+    T_image_raw = results_dict.get('T_image_raw', None)
     T_image_clean = results_dict['T_image_clean']
     T_image_est = results_dict['T_image_est']
+    T_state_bounds = results_dict.get('T_state_bounds', None)
+    lows = np.array([bound.lo for bound in T_state_bounds])
+    highs = np.array([bound.hi for bound in T_state_bounds])
 
     T_state_gt = np.stack(T_state_gt, axis=0)
     T_state_clean = np.stack(T_state_clean, axis=0)
     T_state_est = np.stack(T_state_est, axis=0)
-
-    T_image_raw = np.stack(T_image_raw, axis=0)
+    if T_image_raw is not None:
+        T_image_raw = np.stack(T_image_raw, axis=0)
     T_image_clean = np.stack(T_image_clean, axis=0)
     T_image_est = np.stack(T_image_est, axis=0)
 
+    # Set up plot vars
     labels = ["CTE (m)", "DTP (m)", "HE (degrees)"]
+    rgb_colors = np.array(pypalettes.load_cmap("Alexandrite").rgb)/255.0
+    black = list(rgb_colors[0])
+    pink = list(rgb_colors[1])
+    dark_teal = list(rgb_colors[2])
+    light_teal = list(rgb_colors[3])
+    purple = list(rgb_colors[4])
+    orange = list(rgb_colors[5])
+    light_purple = list(rgb_colors[6])
+    teal = list(rgb_colors[7])
     # Plot.
-    fig, axes = plt.subplots(3, layout="constrained")
+    fig, axes = plt.subplots(2, layout="constrained")
     for ii, ax in enumerate(axes):
-        ax.plot(T_t, T_state_gt[:, ii], color="C4", label="True")
-        ax.plot(T_t, T_state_est[:, ii], color="C1", label="Estimated")
-        ax.plot(T_t, T_state_clean[:, ii], color="C0", label="No attack")
+        ax.plot(T_t, T_state_gt[:, [0, 2]][:, ii], color=dark_teal, label="True", linewidth=1)
+        ax.plot(T_t, T_state_est[:, [0, 2]][:, ii], color=pink, label="Estimated", linewidth=1)
+        ax.plot(T_t, T_state_clean[:, [0, 2]][:, ii], color=purple, label="No attack", linewidth=1)
+        if ii == 1:
+            lows[:, ii] = np.rad2deg(lows[:, ii])
+            highs[:, ii] = np.rad2deg(highs[:, ii])
+        ax.fill_between(T_t, lows[:, ii], highs[:, ii], color=teal, alpha=0.4, label="State bounds" if ii == 0 else None)
         ax.set_ylabel(labels[ii], rotation=0, ha="right")
-    axes[2].legend()
-    fig.savefig(results_dir + "sim2_traj.pdf")
+    axes[0].legend()
+    # fig.savefig(results_dir + "sim2_traj.pdf")
     plt.show()
     plt.close(fig)
+    # fig, axes = plt.subplots(3, layout="constrained")
+    # for ii, ax in enumerate(axes):
+    #     ax.plot(T_t, T_state_gt[:, ii], color="C4", label="True")
+    #     ax.plot(T_t, T_state_est[:, ii], color="C1", label="Estimated")
+    #     ax.plot(T_t, T_state_clean[:, ii], color="C0", label="No attack")
+    #     ax.set_ylabel(labels[ii], rotation=0, ha="right")
+    # axes[2].legend()
+    # fig.savefig(results_dir + "sim2_traj.pdf")
+    # plt.show()
+    # plt.close(fig)
     ###############################################3
     # x axis = DTP, y axis = CTE.
     cte_constr = 10.0
@@ -433,34 +463,26 @@ def save_results(results_dict):
     plt.close(fig)
 
     print("Error Metrics:")
-    print("CTE MAE:", np.nanmean(np.abs(T_state_gt[:, 0] - T_state_est[:, 0])))
+    print("CTE MAE:", np.nanmean(np.abs(T_state_gt[:, 0] - T_state_clean[:, 0])))
     # print("CTE RMSE:", np.nansqrt(np.mean((T_state_gt[:, 0] - T_state_est[:, 0])**2)))
-    print("CTE MaxAE:", np.nanmax(np.abs(T_state_gt[:, 0] - T_state_est[:, 0])))
-    print("HE MAE:", np.nanmean(np.abs(T_state_gt[:, 2] - T_state_est[:, 2])))
+    print("CTE MaxAE:", np.nanmax(np.abs(T_state_gt[:, 0] - T_state_clean[:, 0])))
+    print("HE MAE:", np.nanmean(np.abs(T_state_gt[:, 2] - T_state_clean[:, 2])))
     # print("HE RMSE:", np.nansqrt(np.mean((T_state_gt[:, 2] - T_state_est[:, 2])**2)))
-    print("HE MaxAE:", np.nanmax(np.abs(T_state_gt[:, 2] - T_state_est[:, 2])))
+    print("HE MaxAE:", np.nanmax(np.abs(T_state_gt[:, 2] - T_state_clean[:, 2])))
 
 
     # Save the data.
-    np.savez(
-        results_dir + "sim2_data.npz",
-        T_state_gt=T_state_gt,
-        T_state_clean=T_state_clean,
-        T_state_est=T_state_est,
-        # T_image_raw=T_image_raw,
-        # T_image_clean=T_image_clean,
-        # T_image_est=T_image_est,
-        T_rudder_clean=T_rudder_clean,
-        T_rudder=T_rudder,
-        T_rudder_filtered=T_rudder_filtered,
-    )
+    
+    with open(results_dir + "sim2_results.pkl", "wb") as f:
+        pickle.dump(results_dict, f)
+    
     settings_dict = {k: v for k, v in settings.__dict__.items() if not k.startswith("__") and not callable(v)}
     with open(results_dir + "settings.json", "w") as f:
         json.dump(settings_dict, f, indent=2, default=str)
 
 
 def simulate_controller_dubins(
-    client, startCTE, startHE, startDTP, endDTP, get_state, get_control, dt, ctrlEvery, simSpeed=1.0, results_dict=None
+    client, startCTE, startHE, startDTP, endDTP, get_state, get_control, dt, ctrlEvery, simSpeed=1.0, results_dict={}
 ):
     """Simulates a controller, overriding the built-in XPlane-11 dynamics to model the aircraft
     as a Dubin's car
@@ -537,7 +559,7 @@ def simulate_controller_dubins(
         else:
             hjnnv_filter = hjnnvUncertaintyAwareFilter(
                 dynamic_models.TaxiNetDynamics(dt=settings.DT),
-                pred_model=settings.NETWORK(),
+                pred_model=settings.GET_STATE,
                 grid=grid,
                 initial_values=values,
                 num_controls=30,
@@ -604,24 +626,17 @@ def simulate_controller_dubins(
     endTime = startTime
     run_end_time = now + 30.0
 
-    if results_dict is not None:
-        print("Resuming from previous results dict")
-        T_t = results_dict['T_t']
-        T_state_gt = results_dict['T_state_gt']
-        T_state_clean = results_dict['T_state_clean']
-        T_state_est = results_dict['T_state_est']
-        T_rudder_clean = results_dict['T_rudder_clean']
-        T_rudder = results_dict['T_rudder']
-        T_rudder_filtered = results_dict['T_rudder_filtered']
-        T_image_raw = results_dict['T_image_raw']
-        T_image_clean = results_dict['T_image_clean']
-        T_image_est = results_dict['T_image_est']
-    else:
-        print("Starting new results dict")
-        T_state_gt, T_state_clean, T_state_est = [], [], []
-        T_image_raw = []
-        T_image_clean, T_image_est = [], []
-        T_rudder_clean, T_rudder, T_rudder_filtered = [], [], []
+    T_t = results_dict.get('T_t', [])
+    T_state_gt = results_dict.get('T_state_gt', [])
+    T_state_clean = results_dict.get('T_state_clean', [])
+    T_state_est = results_dict.get('T_state_est', [])
+    T_rudder_clean = results_dict.get('T_rudder_clean', [])
+    T_rudder = results_dict.get('T_rudder', [])
+    T_rudder_filtered = results_dict.get('T_rudder_filtered', [])
+    T_image_raw = results_dict.get('T_image_raw', [])
+    T_image_clean = results_dict.get('T_image_clean', [])
+    T_image_est = results_dict.get('T_image_est', [])
+    T_state_bounds = results_dict.get('T_state_bounds', [])
     
     # ipdb.set_trace()
 
@@ -659,8 +674,9 @@ def simulate_controller_dubins(
         T_image_raw.append(image_raw)
 
         # Get the estimated state and control without attack
-        cte_clean, he_clean, img_clean, _ = get_state(image_raw)
+        cte_clean, he_clean, img_clean, _ = get_state(image_raw, x_prev=x_hat_prev, u_prev=u_hat_prev,)
         phiDeg_clean = get_control(client, cte_clean, he_clean)
+        state_bounds = hj.sets.Box(lo=jnp.empty((2,)), hi=jnp.empty((2,)))
 
         # Get the estimated state and control with attack
         # if cte_gt >= 0.0:
@@ -675,7 +691,14 @@ def simulate_controller_dubins(
         #     target = jnp.array([cte_clean - 2.0, he_clean - 10.0])
         # else:
         #     target = jnp.array([0.0, 0.0])
-        target = 2 - 7/10 * (cte_gt - 10)
+
+        # This is what I've been using - does work
+        # target = 2 - 7/10 * (cte_gt - 10)
+
+        # Testing
+        target = 7 - 6/(1+np.exp(-(1.0*cte_gt-7)))  # sigmoid curve from 0 to 7 as cte goes from -inf to +inf
+        # target = np.clip(2 - 7/10 * (cte_gt - 10), -7.0, 7.0)
+        # target = 7 - 5/(1+np.exp(-(1.0*cte_gt-7)))  # sigmoid curve from 0 to 7 as cte goes from -inf to +inf
         # target = 7.0
 
         print("Target for attack:", target)
@@ -702,12 +725,30 @@ def simulate_controller_dubins(
             time_start2 = time.time()
             if settings.SMOOTHING:
                 obs = jnp.concatenate([x_hat_prev, u_hat_prev, img])
+                eps = jnp.concatenate([jnp.ones((3,))*1e-6, jnp.ones((128,))*settings.ATTACK_STRENGTH])
 
             else:
                 obs = img
+                eps = settings.ATTACK_STRENGTH
+
+            # Right before calling nnv_state_bounds(...)
+            print("nnv input shape:", obs.shape)
+            print("nnv eps shape:", getattr(eps, "shape", None), "eps value:", eps if getattr(eps, "shape", None) is None else None)
+            print("obs (first 10):", obs.flatten()[:10])
+            if hasattr(eps, "shape"):
+                print("eps (first 10):", eps.flatten()[:10])
+
+            # If using smoothing, ensure the predicted-smoothing function accepts that exact shape:
+            try:
+                # run the point-prediction for the same obs you pass
+                pred_point = settings.GET_STATE_SMOOTHED(obs)   # or settings.GET_STATE_SMOOTHED(obs) if outside class
+                print("pred_point:", pred_point)
+            except Exception as e:
+                print("pred_model raised:", e)
+            
             state_bounds = hjnnv_filter.nnv_state_bounds(
                 obs,
-                settings.ATTACK_STRENGTH
+                eps
             )
 
             lo = jnp.array([state_bounds.lo[0], jnp.deg2rad(state_bounds.lo[1])])
@@ -795,6 +836,8 @@ def simulate_controller_dubins(
         state_clean = np.array([cte_clean, dtp_gt, he_clean])
         T_state_clean.append(state_clean)
 
+        T_state_bounds.append(state_bounds)
+
         # # Wait for next timestep. 1 Hz control rate?
         # while endTime - startTime < dt:
         #     endTime = client.getDREF("sim/time/zulu_time_sec")[0]
@@ -816,21 +859,19 @@ def simulate_controller_dubins(
 
     client.pauseSim(True)
 
-
-
-    if results_dict is None:
+    if results_dict == {}:
         T_t = np.arange(len(T_state_gt)) * dt
-        T_t = np.concatenate([T_t, np.array([np.nan])])
+        # T_t = np.concatenate([T_t, np.array([np.nan])])
     else:
         T_t_ = np.arange(len(T_state_gt) - init_sim_len) * dt
-        T_t = np.concatenate([results_dict['T_t'], T_t_, np.array([np.nan])])
+        # T_t = np.concatenate([results_dict['T_t'], T_t_, np.array([np.nan])])
 
-    T_state_gt.append([np.nan]*state_gt.shape[0])
-    T_state_clean.append([np.nan]*state_gt.shape[0])
-    T_state_est.append([np.nan]*state_gt.shape[0])
-    T_rudder_clean.append(np.nan)
-    T_rudder.append(np.nan)
-    T_rudder_filtered.append(np.nan)
+    # T_state_gt.append([np.nan]*state_gt.shape[0])
+    # T_state_clean.append([np.nan]*state_gt.shape[0])
+    # T_state_est.append([np.nan]*state_gt.shape[0])
+    # T_rudder_clean.append(np.nan)
+    # T_rudder.append(np.nan)
+    # T_rudder_filtered.append(np.nan)
 
     results_dict = {
         "results_dir": results_dir,
@@ -838,12 +879,13 @@ def simulate_controller_dubins(
         "T_state_gt": T_state_gt,
         "T_state_clean": T_state_clean,
         "T_state_est": T_state_est,
-        "T_image_raw": T_image_raw,
+        # "T_image_raw": T_image_raw,
         "T_image_clean": T_image_clean,
         "T_image_est": T_image_est,
         "T_rudder_clean": T_rudder_clean,
         "T_rudder": T_rudder,
-        "T_rudder_filtered": T_rudder_filtered
+        "T_rudder_filtered": T_rudder_filtered,
+        "T_state_bounds": T_state_bounds
     }
 
     save_results(results_dict)
