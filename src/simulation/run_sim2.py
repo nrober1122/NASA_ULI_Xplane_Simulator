@@ -415,13 +415,14 @@ def save_results(results_dict):
         ax.plot(T_t, T_state_gt[:, [0, 2]][:, ii], color=dark_teal, label="True", linewidth=1)
         ax.plot(T_t, T_state_est[:, [0, 2]][:, ii], color=pink, label="Estimated", linewidth=1)
         ax.plot(T_t, T_state_clean[:, [0, 2]][:, ii], color=purple, label="No attack", linewidth=1)
-        if ii == 1:
-            lows[:, ii] = np.rad2deg(lows[:, ii])
-            highs[:, ii] = np.rad2deg(highs[:, ii])
-            lows_[:, ii] = np.rad2deg(lows_[:, ii])
-            highs_[:, ii] = np.rad2deg(highs_[:, ii])
-        ax.fill_between(T_t, lows[:, ii], highs[:, ii], color=light_teal, alpha=0.4, label="State bounds" if ii == 0 else None)
-        ax.fill_between(T_t, lows_[:, ii], highs_[:, ii], color=teal, alpha=0.4, label="Filtered bounds" if ii == 0 else None)
+        if settings.FILTER:
+            if ii == 1:
+                lows[:, ii] = np.rad2deg(lows[:, ii])
+                highs[:, ii] = np.rad2deg(highs[:, ii])
+                lows_[:, ii] = np.rad2deg(lows_[:, ii])
+                highs_[:, ii] = np.rad2deg(highs_[:, ii])
+            ax.fill_between(T_t, lows[:, ii], highs[:, ii], color=light_teal, alpha=0.4, label="State bounds" if ii == 0 else None)
+            ax.fill_between(T_t, lows_[:, ii], highs_[:, ii], color=teal, alpha=0.4, label="Filtered bounds" if ii == 0 else None)
         ax.set_ylabel(labels[ii], rotation=0, ha="right")
     axes[0].legend()
     fig.savefig(results_dir + "sim2_traj.pdf")
@@ -638,6 +639,7 @@ def simulate_controller_dubins(
     T_rudder_clean = results_dict.get('T_rudder_clean', [])
     T_rudder = results_dict.get('T_rudder', [])
     T_rudder_filtered = results_dict.get('T_rudder_filtered', [])
+    T_rudder_unfiltered = results_dict.get('T_rudder_unfiltered', [])
     T_image_raw = results_dict.get('T_image_raw', [])
     T_image_clean = results_dict.get('T_image_clean', [])
     T_image_est = results_dict.get('T_image_est', [])
@@ -826,7 +828,8 @@ def simulate_controller_dubins(
             #             val_filter_h, v_star_h)
             # logger.info("Control: %.2f, Filtered Control: %.2f",
             #             phiDeg_h, ctrl_h)
-            # T_rudder_filtered.append(phiDeg_star_h)
+            T_rudder_filtered.append(phiDeg_star)
+            T_rudder_unfiltered.append(phiDeg)
             # print("Time taken for logging: {:.5f}".format(time.time() - time_logs))
         time_filter_total = time.time() - time_start
         logger.info("Filter Total Time: {:.5f}".format(time_filter_total))
@@ -891,6 +894,7 @@ def simulate_controller_dubins(
         "T_rudder_clean": T_rudder_clean,
         "T_rudder": T_rudder,
         "T_rudder_filtered": T_rudder_filtered,
+        "T_rudder_unfiltered": T_rudder_unfiltered,
         "T_state_bounds": T_state_bounds
     }
 
