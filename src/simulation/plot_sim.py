@@ -14,6 +14,7 @@ import matplotlib.gridspec as gridspec
 
 
 rgb_colors = np.array(pypalettes.load_cmap("Alexandrite").rgb)/255.0
+rgb_colors[2] = rgb_colors[2] * 0.8
 black = list(rgb_colors[0])
 pink = list(rgb_colors[1])
 dark_teal = list(rgb_colors[2])
@@ -73,14 +74,16 @@ def plot_states(data, settings):
     T_t = np.arange(T_state_gt.shape[0]) * settings["DT"]
     labels = ["CTE (m)", "HE (degrees)"]
 
-    fig, axes = plt.subplots(2, layout="constrained")
+    linewidth = 1.5
+
+    fig, axes = plt.subplots(2, layout="constrained", figsize=(12, 8), sharex=True)
     for ii, ax in enumerate(axes):
-        ax.plot(T_t, T_state_gt[:, ii], color=dark_teal, label="True", linewidth=1)
-        ax.plot(T_t, T_state_est[:, ii], color=pink, label="Estimated", linewidth=1)
-        ax.plot(T_t, T_state_clean[:, ii], color=purple, label="No attack", linewidth=1)
+        ax.plot(T_t, T_state_gt[:, ii], color=dark_teal, label="True", linewidth=linewidth)
+        ax.plot(T_t, T_state_est[:, ii], color=pink, label="Estimated", linewidth=linewidth)
+        ax.plot(T_t, T_state_clean[:, ii], color=purple, label="No attack", linewidth=linewidth)
         if ii == 0:
-            ax.plot(T_t, -10*np.ones_like(T_t), color=black, label="Safe Boundary", linewidth=1, linestyle='--')
-            ax.plot(T_t, 10*np.ones_like(T_t), color=black, linewidth=1, linestyle='--')
+            ax.plot(T_t, -10*np.ones_like(T_t), color=black, label="Safe Boundary", linewidth=linewidth, linestyle='--')
+            ax.plot(T_t, 10*np.ones_like(T_t), color=black, linewidth=linewidth, linestyle='--')
         if settings["FILTER"]:
             if ii == 1:
                 lows[:, ii] = np.rad2deg(lows[:, ii])
@@ -105,7 +108,9 @@ def plot_states(data, settings):
         # ax.plot(T_t, T_state_est[:, ii]+4, color=rgb_colors[7], label="Estimated", linewidth=4)
         # ax.plot(T_t, T_state_clean[:, ii]+4, color=rgb_colors[8], label="No attack", linewidth=4)
         ax.set_ylabel(labels[ii], rotation=0, ha="right")
-    axes[0].legend()
+    leg = axes[0].legend(framealpha=1.0, edgecolor="0.3")
+    # leg.get_frame().set_facecolor("white")
+    axes[1].set_xlabel("Time (s)")
     # fig.savefig(results_dir + "sim2_traj.pdf")
     plt.show()
     plt.close(fig)

@@ -6,7 +6,7 @@ import pypalettes
 
 xpc3_dir = os.environ["NASA_ULI_ROOT_DIR"] + "/src/"
 results_dir = os.environ["NASA_ULI_DATA_DIR"] + "/logs/LOG_" + datetime.now().strftime("%Y%m%d_%H_%M_%S") + "/"
-os.makedirs(results_dir, exist_ok=True)
+
 
 sys.path.append(xpc3_dir)
 
@@ -332,6 +332,7 @@ def simulate_controller(
     plt.close(fig)
 
     # Save the data.
+    os.makedirs(results_dir, exist_ok=True)
     np.savez(
         results_dir + "sim2_data.npz",
         T_state_gt=T_state_gt,
@@ -898,6 +899,7 @@ def simulate_controller_dubins(
         "T_state_bounds": T_state_bounds
     }
 
+    os.makedirs(results_dir, exist_ok=True)
     save_results(results_dict)
 
     return results_dict
