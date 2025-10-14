@@ -1,26 +1,15 @@
 DUBINS: true
 USING_TORCH: false
 
-STATE_ESTIMATOR: "tiny_taxinet"
-ATTACK: pgd
-# ATTACK_STRENGTH: 0.021
-
-
-# STATE_ESTIMATOR: "cnn"
-# ATTACK: fgsm   # null means None in YAML
-# ATTACK: static_atk
-# ATTACK options could be: null, static_atk, static_atk_dnn, fgsm, pgd
-# ATTACK_STRENGTH: 0.049
-# ATTACK_STRENGTH: 0.0005
-SMOOTHING: true
+STATE_ESTIMATOR: "cnn64" # "tiny_taxinet", "cnn64", "cnn"
+ATTACK: null # null, pgd, fgsm
+SMOOTHING: false
 SMOOTHING_ALPHA: 0.5
 
 ATTACK_STRENGTH: 0.022
-# ATTACK_STRENGTH: 0.021
-# ATTACK_STRENGTH: 0.00001
 TARGET: 7.0
-# ATTACK_STRENGTH: 0.005
-FILTER: true
+
+FILTER: false
 CTE_BUFFER: 3.0
 HE_BUFFER: 30.0
 

@@ -656,7 +656,7 @@ def simulate_controller_dubins(
 
     image_raw = get_xplane_image()
     cte_clean, he_clean, img_clean, adv_image = get_state(image_raw)
-    adv_img = jnp.zeros_like(img_clean)
+    adv_img = None
 
     cte_pred, he_pred = cte_clean, he_clean
     ctrl_h = 0.0
