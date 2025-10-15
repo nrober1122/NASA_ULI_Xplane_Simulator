@@ -222,3 +222,23 @@ def evaluate_network_smoothed(observation: jnp.ndarray, alpha=0.7):
     )
     state_hat = alpha * state_hat_nn + (1-alpha) * state_hat_dyn
     return state_hat
+
+
+def package_input(x_prev, u_prev, image):
+    """Package the observation into a single array for the network.
+
+    Args:
+        x_prev (float): Previous crosstrack error.
+        u_prev (float): Previous heading error.
+        image (np.ndarray): The input image.
+    
+    Returns:
+        jnp.ndarray: The packaged observation.
+    """
+    assert image.shape == (128,)
+    return jnp.concatenate([x_prev, u_prev, image])
+
+
+def target_function(cte, he, max_rudder_deg=7):
+    # return 2 - 7/10 * (cte - 10)
+    return max_rudder_deg

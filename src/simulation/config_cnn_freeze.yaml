@@ -1,0 +1,27 @@
+DUBINS: true
+USING_TORCH: false
+
+STATE_ESTIMATOR: "cnn64" # "tiny_taxinet", "cnn64", "cnn"
+ATTACK: pgd # null, pgd, fgsm
+SMOOTHING: true
+SMOOTHING_ALPHA: 0.5
+PGD_ALPHA: 0.0005
+PGD_STEPS: 80
+
+ATTACK_STRENGTH: 0.03
+TARGET: 7.0
+
+FILTER: false
+CTE_BUFFER: 0.0 # tiny_taxinet: 3.0
+HE_BUFFER: 0.0 # tiny_taxinet: 30.0
+
+TIME_OF_DAY: 8.0
+CLOUD_COVER: 0
+
+START_CTE: -9.5
+START_HE: 0.0 
+START_DTP: 322.0
+END_DTP: 522.0
+
+DT: 0.1
+CTRL_EVERY: 1

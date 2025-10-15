@@ -84,7 +84,9 @@ def get_state(
                 target=jnp.array(target),
                 observation=jnp.array(image_processed),
                 epsilon=settings.ATTACK_STRENGTH,
-                loss_fn=attack
+                loss_fn=attack,
+                key=key,
+                perturbation_prev=adv_ptb_prev
             )
             if adv_ptb_prev is not None and loss > 100.0:
                 print("Reusing previous adv image")
@@ -102,10 +104,11 @@ def get_state(
                 target=jnp.array(target),
                 observation=jnp.array(image_processed),
                 epsilon=settings.ATTACK_STRENGTH,
-                iters=40,
-                alpha=0.005,
+                iters=settings.PGD_STEPS,
+                alpha=settings.PGD_ALPHA,
                 loss_fn=attack,
-                key=key
+                key=key,
+                perturbation_prev=adv_ptb_prev
             )
             if adv_ptb_prev is not None and loss > 100.0:
                 perturbation = adv_ptb_prev
@@ -121,8 +124,8 @@ def get_state(
     # Estimate state from processed image
 
     if settings.SMOOTHING and x_prev is not None:
-        print("Using smoothing with alpha =", settings.SMOOTHING_ALPHA)
-        observation = jnp.concatenate([x_prev, u_prev, image_processed])
+        observation = settings.PACKAGE_INPUT(x_prev, u_prev, image_processed)
+        # observation = jnp.concatenate([x_prev, u_prev, image_processed])
         cte, he = settings.GET_STATE_SMOOTHED(observation)
     else:
         observation = image_processed
@@ -552,11 +555,14 @@ def simulate_controller_dubins(
             (100, 100),
         )
         values = -jnp.abs(grid.states[..., 0]) + 10.0
-
+        filter_dyn = dynamic_models.TaxiNetDynamics(
+            dt=settings.DT,
+            max_rudder=jnp.tan(jnp.deg2rad(settings.MAX_RUDDER))
+        )
         # Set up the uncertainty-aware filter
         if settings.SMOOTHING:
             hjnnv_filter = hjnnvUncertaintyAwareFilter(
-                dynamic_models.TaxiNetDynamics(dt=settings.DT),
+                filter_dyn,
                 pred_model=settings.GET_STATE_SMOOTHED,
                 grid=grid,
                 initial_values=values,
@@ -565,7 +571,7 @@ def simulate_controller_dubins(
             )
         else:
             hjnnv_filter = hjnnvUncertaintyAwareFilter(
-                dynamic_models.TaxiNetDynamics(dt=settings.DT),
+                filter_dyn,
                 pred_model=settings.GET_STATE,
                 grid=grid,
                 initial_values=values,
@@ -590,8 +596,11 @@ def simulate_controller_dubins(
 
         elif settings.STATE_ESTIMATOR == 'dnn':
             dummy_input = jnp.zeros((1, 3, 224, 224))
-        elif settings.STATE_ESTIMATOR == 'cnn64':
-            dummy_input = jnp.zeros((1, 1, 64, 64))
+        elif settings.STATE_ESTIMATOR in ['cnn64', 'cnn']:
+            if settings.SMOOTHING:
+                dummy_input = jnp.zeros((1+1, 64, 64))
+            else:
+                dummy_input = jnp.zeros((1, 64, 64))
 
         # p = settings.NETWORK()   # or settings.GET_STATE_SMOOTHED
         # print("pred_model callable?", callable(p))
@@ -631,7 +640,7 @@ def simulate_controller_dubins(
     startTime = client.getDREF("sim/time/zulu_time_sec")[0]
     now = startTime
     endTime = startTime
-    run_end_time = now + 30.0
+    run_end_time = now + 1000.0
 
     T_t = results_dict.get('T_t', [])
     T_state_gt = results_dict.get('T_state_gt', [])
@@ -668,9 +677,10 @@ def simulate_controller_dubins(
         rudder = jnp.clip(-0.74 * cte - 0.44 * he, -7.0, 7.0)
         return (rudder - target_rudder)**2
 
-    while dtp < endDTP and now < run_end_time and np.abs(cte_gt) < 10.5:
+    while dtp_dym < endDTP and now < run_end_time and np.abs(cte_gt) < 10.5:
         simLoopTimer = time.time()
         x_hat_prev = jnp.array([cte_pred, he_pred])
+        x_hat_prev_clean = jnp.array([cte_clean, he_clean])
         u_hat_prev = jnp.array([jnp.tan(jnp.deg2rad(ctrl_h))])
         # Get ground truth state
         cte_gt, dtp_gt, he_gt = xpc3_helper.getHomeState(client)
@@ -682,37 +692,16 @@ def simulate_controller_dubins(
         T_image_raw.append(image_raw)
 
         # Get the estimated state and control without attack
+        # Need to think about this line more - should not be using x_prev_clean, but what is best thing to plot?
+        # Plotting should be x_hat_prev, but error buffer should be calculated by x_hat_prev_clean
         cte_clean, he_clean, img_clean, _ = get_state(image_raw, x_prev=x_hat_prev, u_prev=u_hat_prev,)
         phiDeg_clean = get_control(client, cte_clean, he_clean)
         state_bounds = hj.sets.Box(lo=jnp.empty((2,)), hi=jnp.empty((2,)))
 
-        # Get the estimated state and control with attack
-        # if cte_gt >= 0.0:
-        #     target = jnp.array([cte_clean + 2.0, he_clean])
-        # elif cte_gt < 0.0:
-        #     target = jnp.array([-10.0, 0.0])
-        # target = jnp.array([cte_clean - 10.0, he_clean - 15.0])
-        
-        # target = settings.TARGET
-        
-        # if cte_gt <= 0.0:
-        #     target = jnp.array([cte_clean - 2.0, he_clean - 10.0])
-        # else:
-        #     target = jnp.array([0.0, 0.0])
-
-        # This is what I've been using - does work
-        target = 2 - 7/10 * (cte_gt - 10)
-        # target = settings.TARGET
-
-        # Testing
-        # target = 7 - 6/(1+np.exp(-(1.0*cte_gt-7)))  # sigmoid curve from 0 to 7 as cte goes from -inf to +inf
-        # target = np.clip(2 - 7/10 * (cte_gt - 10), -7.0, 7.0)
-        # target = 7 - 5/(1+np.exp(-(1.0*cte_gt-7)))  # sigmoid curve from 0 to 7 as cte goes from -inf to +inf
-        # target = 7.0
-
-        print("Target for attack:", target)
+        target_rudder = settings.TARGET_FUNCTION(cte_gt, he_gt, settings.MAX_RUDDER)
+        print("Target for attack:", target_rudder)
         key, subkey = jax.random.split(key)
-        cte_pred, he_pred, img, adv_img = get_state(image_raw, x_prev=x_hat_prev, u_prev=u_hat_prev, target=target, attack=rudder_target, adv_ptb_prev=adv_img, key=subkey)
+        cte_pred, he_pred, img, adv_img = get_state(image_raw, x_prev=x_hat_prev, u_prev=u_hat_prev, target=target_rudder, attack=rudder_target, adv_ptb_prev=adv_img, key=subkey)
         logger.info("----------------------------------------------------------")
         logger.info("CTE: {:.2f} ({:.2f}), HE: {:.2f} ({:.2f})".format(cte_pred, cte_gt, he_pred, he_gt))
         phiDeg = get_control(client, cte_pred, he_pred)
@@ -732,9 +721,14 @@ def simulate_controller_dubins(
                 img = img.reshape(-1, 3, 224, 224)
             # print("Time taken for reshaping: {:.5f}".format(time.time() - time_start1))
             time_start2 = time.time()
-            if settings.SMOOTHING:
-                obs = jnp.concatenate([x_hat_prev, u_hat_prev, img])
+            if settings.SMOOTHING and settings.STATE_ESTIMATOR == 'tiny_taxinet':
+                # obs = jnp.concatenate([x_hat_prev, u_hat_prev, img])
+                obs = settings.PACKAGE_INPUT(x_hat_prev, u_hat_prev, img)
                 eps = jnp.concatenate([jnp.ones((3,))*1e-6, jnp.ones((128,))*settings.ATTACK_STRENGTH])
+            elif settings.SMOOTHING and settings.STATE_ESTIMATOR in ['cnn64', 'cnn']:
+                # obs = jnp.concatenate([x_hat_prev, jnp.expand_dims(img, axis=0)], axis=0)
+                obs = settings.PACKAGE_INPUT(x_hat_prev, u_hat_prev, img)
+                eps = jnp.concatenate([jnp.ones(img.shape)*0.0, jnp.ones(img.shape)*settings.ATTACK_STRENGTH], axis=0)
 
             else:
                 obs = img

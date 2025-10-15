@@ -148,7 +148,7 @@ def plot_trajectory(data, settings, aux_data=None, plot_u=False):
 
         # Compute the color values based on abs(rudder_unfiltered - rudder_filtered)
         color_vals = np.abs(T_rudder_unfiltered - T_rudder_filtered)
-        color_vals = np.convolve(color_vals, np.ones(5)/5, mode='same')
+        color_vals = np.convolve(color_vals, np.ones(3)/3, mode='same')
 
         norm = plt.Normalize(vmin=np.min(color_vals), vmax=np.max(color_vals))
         

@@ -8,6 +8,7 @@ from simulators.NASA_ULI_Xplane_Simulator.src.simulation import tiny_taxinet
 from simulators.NASA_ULI_Xplane_Simulator.src.simulation import tiny_taxinet2
 from simulators.NASA_ULI_Xplane_Simulator.src.simulation import static_atk
 from simulators.NASA_ULI_Xplane_Simulator.src.simulation import static_atk_dnn
+from simulators.NASA_ULI_Xplane_Simulator.src.train_DNN import model_taxinet
 from utils.attacks import fgsm, pgd
 from functools import partial
 
@@ -27,7 +28,10 @@ SMOOTHING_ALPHA = config["SMOOTHING_ALPHA"]
 
 ATTACK_STRING = config["ATTACK"]        # Will be None if YAML has null
 ATTACK_STRENGTH = config["ATTACK_STRENGTH"]
-TARGET = config["TARGET"]
+TARGET = config.get("TARGET", 7.0)
+PGD_ALPHA = config["PGD_ALPHA"]
+PGD_STEPS = config["PGD_STEPS"]
+
 FILTER = config["FILTER"]
 CTE_BUFFER = config["CTE_BUFFER"]
 HE_BUFFER = config["HE_BUFFER"]
@@ -39,6 +43,7 @@ START_HE = config["START_HE"]
 START_DTP = config["START_DTP"]
 END_DTP = config["END_DTP"]
 DT = config["DT"]
+MAX_RUDDER = config["MAX_RUDDER"]
 CTRL_EVERY = config["CTRL_EVERY"]
 
 # # Whether or not to override the X-Plane 11 simulator dynamics with a Dubin's car model
@@ -73,6 +78,8 @@ if STATE_ESTIMATOR == 'tiny_taxinet':
     GET_STATE_SMOOTHED = partial(tiny_taxinet2.evaluate_network_smoothed, alpha=SMOOTHING_ALPHA)
     GET_STATE = tiny_taxinet2.evaluate_network
     NETWORK = tiny_taxinet2.get_network
+    TARGET_FUNCTION = tiny_taxinet2.target_function
+    PACKAGE_INPUT = tiny_taxinet2.package_input
 elif STATE_ESTIMATOR == 'fully_observable':
     GET_STATE = fully_observable.getStateFullyObservable
 elif STATE_ESTIMATOR == 'dnn':
@@ -89,7 +96,16 @@ elif STATE_ESTIMATOR in ['cnn', 'cnn64']:
     print(f"Using {STATE_ESTIMATOR} with in_channels={in_channels}, H={H}, W={W}")
     PROCESS_IMG = partial(pretrained_dnn.process_image, in_channels=in_channels, width=W, height=H)
     GET_STATE = partial(pretrained_dnn.evaluate_network, in_channels=in_channels, width=W, height=H)
+    GET_STATE_SMOOTHED = partial(
+        pretrained_dnn.evaluate_network_smoothed,
+        in_channels=in_channels,
+        width=W,
+        height=H,
+        alpha=SMOOTHING_ALPHA
+    )
     NETWORK = partial(pretrained_dnn.get_network, in_channels=in_channels, W=W, H=H)
+    TARGET_FUNCTION = pretrained_dnn.target_function
+    PACKAGE_INPUT = pretrained_dnn.package_input
     # PROCESS_IMG = pretrained_dnn.process_image
     # GET_STATE = pretrained_dnn.evaluate_network
     # NETWORK = pretrained_dnn.get_network

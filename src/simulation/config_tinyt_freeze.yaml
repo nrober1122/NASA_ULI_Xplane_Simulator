@@ -1,0 +1,31 @@
+DUBINS: true
+USING_TORCH: false
+
+STATE_ESTIMATOR: "tiny_taxinet" # "tiny_taxinet", "cnn64", "cnn"
+ATTACK: pgd # null, pgd, fgsm
+SMOOTHING: true
+SMOOTHING_ALPHA: 0.5
+PGD_ALPHA: 0.005
+PGD_STEPS: 40
+
+ATTACK_STRENGTH: 0.022
+TARGET: 7.0
+
+FILTER: true
+CTE_BUFFER: 3.0 # tiny_taxinet: 3.0
+HE_BUFFER: 25.0 # tiny_taxinet: 30.0
+
+TIME_OF_DAY: 8.0
+CLOUD_COVER: 0
+
+START_CTE: -8.0
+START_HE: 0.0 
+START_DTP: 322.0
+END_DTP: 422.0
+
+DT: 0.1
+CTRL_EVERY: 1
+
+# This config shows a working attack against the tiny_taxinet model.
+# The filter activates, but in both directions. Need to investigate jumps in CTE
+# (possibly due to centerline). Could potentially talk about dependence on observation.
