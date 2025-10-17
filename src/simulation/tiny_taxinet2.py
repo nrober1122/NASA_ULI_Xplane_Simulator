@@ -240,5 +240,5 @@ def package_input(x_prev, u_prev, image):
 
 
 def target_function(cte, he, max_rudder_deg=7):
-    # return 2 - 7/10 * (cte - 10)
+    # return 2 - max_rudder_deg/10 * (cte - 10)
     return max_rudder_deg

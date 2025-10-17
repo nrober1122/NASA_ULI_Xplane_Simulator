@@ -313,10 +313,10 @@ def evaluate_network_smoothed(observation: jnp.ndarray,
     return state_hat
 
 
-def target_function(cte, he):
+def target_function(cte, he,  max_rudder_deg=7):
     """Given current cte and he, return the target rudder angle."""
-    # return 7
-    return jnp.clip(6 - 7/10 * (cte - 10), -9, 9)
+    return 7
+    # return 6 - 7/10 * (cte - 10)
 
 
 def package_input(x_prev, u_prev, image):

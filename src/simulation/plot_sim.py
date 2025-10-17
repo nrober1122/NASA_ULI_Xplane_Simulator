@@ -10,8 +10,10 @@ import pickle
 from matplotlib.collections import LineCollection
 import matplotlib.colors as mcolors
 from mpl_toolkits.axes_grid1 import make_axes_locatable
+import matplotlib as mpl
 import matplotlib.gridspec as gridspec
 
+import hj_reachability as hj
 
 rgb_colors = np.array(pypalettes.load_cmap("Alexandrite").rgb)/255.0
 rgb_colors[2] = rgb_colors[2] * 0.8
@@ -29,28 +31,34 @@ light_purple = list(rgb_colors[6])
 teal = list(rgb_colors[7])
 hot_pink = [1.0, 46/255.0, 204/255.0]  # hot pink
 
+plt.rcParams['font.family'] = 'serif'          # e.g., 'sans-serif', 'serif', 'monospace'
+plt.rcParams['font.serif'] = ['Times New Roman']  # specify font
+plt.rcParams['font.size'] = 20                 # set global font size
+# plt.rcParams['mathtext.fontset'] = 'dejavuserif'  # optional, for math text consistency
 
 data_dir = '/home/nick/code/hjnnv/data/scratch/NASA_ULI_Xplane_Simulator/logs/'
 
 
-def plot_sim(filename, plot_type, aux_file=None, plot_u=False):
-    data_file = data_dir + filename + '/sim2_results.pkl'
+def plot_sim(args):
+    data_file = data_dir + args.file + '/sim2_results.pkl'
     with open(data_file, "rb") as f:
         data = pickle.load(f)
 
-    settings_file = data_dir + filename + '/settings.json'
+    settings_file = data_dir + args.file + '/settings.json'
     with open(settings_file) as f:
         settings = json.load(f)
-    
-    if plot_type == "states":
+
+    if args.plot_type == "states":
         plot_states(data, settings)
-    elif plot_type == "trajectory":
+    elif args.plot_type == "trajectory":
         aux_data = None
-        if aux_file is not None:
-            aux_data_file = data_dir + aux_file + '/sim2_results.pkl'
+        if args.aux_file is not None:
+            aux_data_file = data_dir + args.aux_file + '/sim2_results.pkl'
             with open(aux_data_file, "rb") as f:
                 aux_data = pickle.load(f)
-        plot_trajectory(data, settings, aux_data, plot_u)
+        plot_trajectory(data, settings, aux_data, args.plot_u, args.cbar)
+    elif args.plot_type == "value_function":
+        plot_value_function(data, settings)
     else:
         raise ValueError("Invalid plot type. Choose 'states' or 'trajectory'.")
 
@@ -92,21 +100,6 @@ def plot_states(data, settings):
                 highs_[:, ii] = np.rad2deg(highs_[:, ii])
             ax.fill_between(T_t, lows[:, ii], highs[:, ii], color=light_teal, alpha=0.4, label="Inflated Bounds" if ii == 0 else None)
             ax.fill_between(T_t, lows_[:, ii], highs_[:, ii], color=teal, alpha=0.4, label="NNV Bounds" if ii == 0 else None)
-        
-
-        # ax.plot(T_t, T_state_gt[:, ii]+2, color=rgb_colors[1], label="True", linewidth=4)
-        # ax.plot(T_t, T_state_gt[:, ii]+4, color=rgb_colors[2], label="True", linewidth=4)
-        # ax.plot(T_t, T_state_gt[:, ii]+6, color=rgb_colors[3], label="True", linewidth=4)
-        # ax.plot(T_t, T_state_gt[:, ii]+8, color=rgb_colors[4], label="True", linewidth=4)
-        # ax.plot(T_t, T_state_gt[:, ii]+10, color=rgb_colors[5], label="True", linewidth=4)
-        # ax.plot(T_t, T_state_gt[:, ii]+12, color=rgb_colors[6], label="True", linewidth=4)
-        # ax.plot(T_t, T_state_gt[:, ii]+14, color=rgb_colors[7], label="True", linewidth=4)        
-        # ax.plot(T_t, T_state_gt[:, ii]+2, color=rgb_colors[3], label="True", linewidth=4)
-        # ax.plot(T_t, T_state_est[:, ii]+2, color=rgb_colors[4], label="Estimated", linewidth=4)
-        # ax.plot(T_t, T_state_clean[:, ii]+2, color=rgb_colors[5], label="No attack", linewidth=4)
-        # ax.plot(T_t, T_state_gt[:, ii]+4, color=rgb_colors[6], label="True", linewidth=4)
-        # ax.plot(T_t, T_state_est[:, ii]+4, color=rgb_colors[7], label="Estimated", linewidth=4)
-        # ax.plot(T_t, T_state_clean[:, ii]+4, color=rgb_colors[8], label="No attack", linewidth=4)
         ax.set_ylabel(labels[ii], rotation=0, ha="right")
     leg = axes[0].legend(framealpha=1.0, edgecolor="0.3")
     # leg.get_frame().set_facecolor("white")
@@ -116,7 +109,7 @@ def plot_states(data, settings):
     plt.close(fig)
     # import ipdb; ipdb.set_trace()
 
-def plot_trajectory(data, settings, aux_data=None, plot_u=False):
+def plot_trajectory(data, settings, aux_data=None, plot_u=False, plot_cbar=False):
     T_state_gt = np.stack(data['T_state_gt'], axis=0)
     T_state_est = np.stack(data['T_state_est'], axis=0)
     T_state_clean = np.stack(data['T_state_clean'], axis=0)
@@ -136,125 +129,154 @@ def plot_trajectory(data, settings, aux_data=None, plot_u=False):
     cte_constr = 10.0
     ylim = 11.0
 
-    def plot_trajectory_helper(ax, T_state, lows, highs, T_state_unfiltered=None, cax=None):
+    def plot_trajectory_helper(ax, T_state, lows, highs, T_state_unfiltered=None, cax=None, plot_cbar=False):
         hot_color = hot_pink
         cold_color = black
-        bounds_color = teal
+        bounds_color = light_teal
         bounds_alpha = 0.6
-        boundary_color = dark_teal
+        bounds_line_color = teal
+        bounds_line_alpha = 0.8
+        boundary_color = pink
 
         print([c*255.0 for c in rgb_colors])
         
+        if plot_cbar:
+            # Compute the color values based on abs(rudder_unfiltered - rudder_filtered)
+            color_vals = np.abs(T_rudder_unfiltered - T_rudder_filtered)
+            color_vals = np.convolve(color_vals, np.ones(3)/3, mode='same')
 
-        # Compute the color values based on abs(rudder_unfiltered - rudder_filtered)
-        color_vals = np.abs(T_rudder_unfiltered - T_rudder_filtered)
-        color_vals = np.convolve(color_vals, np.ones(3)/3, mode='same')
+            norm = plt.Normalize(vmin=np.min(color_vals), vmax=np.max(color_vals))
+            
+            # Create custom colormap
+            colors = [cold_color, hot_color]
+            cmap = mcolors.LinearSegmentedColormap.from_list("dark_teal_2_purple", colors)
 
-        norm = plt.Normalize(vmin=np.min(color_vals), vmax=np.max(color_vals))
-        
-        # Create custom colormap
-        colors = [cold_color, hot_color]
-        cmap = mcolors.LinearSegmentedColormap.from_list("dark_teal_2_purple", colors)
+            # Create a colored line using LineCollection
 
-        # Create a colored line using LineCollection
+            # points = np.array([T_state_gt[:, 1], T_state_gt[:, 0]]).T.reshape(-1, 1, 2)
+            # segments = np.concatenate([points[:-1], points[1:]], axis=1)
+            # # lc = LineCollection(segments, cmap=cmap, norm=norm, array=color_vals, linewidth=3, zorder=11, label="Position")
+            # # ax.add_collection(lc)
+            # sc = ax.scatter(T_state_gt[:, 1], T_state_gt[:, 0], c=color_vals, cmap=cmap, norm=norm, s=10, zorder=11)
+            # plt.colorbar(sc, ax=ax, label="|rudder_unfiltered - rudder_filtered|")
 
-        # points = np.array([T_state_gt[:, 1], T_state_gt[:, 0]]).T.reshape(-1, 1, 2)
-        # segments = np.concatenate([points[:-1], points[1:]], axis=1)
-        # # lc = LineCollection(segments, cmap=cmap, norm=norm, array=color_vals, linewidth=3, zorder=11, label="Position")
-        # # ax.add_collection(lc)
-        # sc = ax.scatter(T_state_gt[:, 1], T_state_gt[:, 0], c=color_vals, cmap=cmap, norm=norm, s=10, zorder=11)
-        # plt.colorbar(sc, ax=ax, label="|rudder_unfiltered - rudder_filtered|")
+            # Create colored line segments
+            points = np.array([T_state_gt[:, 1], T_state_gt[:, 0]]).T.reshape(-1, 1, 2)
+            segments = np.concatenate([points[:-1], points[1:]], axis=1)
 
-        # Create colored line segments
-        points = np.array([T_state_gt[:, 1], T_state_gt[:, 0]]).T.reshape(-1, 1, 2)
-        segments = np.concatenate([points[:-1], points[1:]], axis=1)
+            lc = LineCollection(
+                segments,
+                cmap=cmap,
+                norm=norm,
+                array=color_vals[:-1],  # one color per segment
+                linewidth=4.0,
+                zorder=11,
+            )
+            lc.set_capstyle('round')
+            lc.set_joinstyle('round')
+            line = ax.add_collection(lc)
+            if T_state_unfiltered is not None:
+                ax.plot(T_state_unfiltered[:, 1],
+                        T_state_unfiltered[:, 0],
+                        color=purple,
+                        linestyle='--',
+                        label="Unfiltered",
+                        linewidth=2,
+                        zorder=10
+                        )
+                ax.scatter(T_state_unfiltered[-2, 1], T_state_unfiltered[-2, 0], color=purple, marker='X', s=200, zorder=11)
 
-        lc = LineCollection(
-            segments,
-            cmap=cmap,
-            norm=norm,
-            array=color_vals[:-1],  # one color per segment
-            linewidth=4.0,
-            zorder=11,
-        )
-        lc.set_capstyle('round')
-        lc.set_joinstyle('round')
-        line = ax.add_collection(lc)
-        if T_state_unfiltered is not None:
-            ax.plot(T_state_unfiltered[:, 1],
-                    T_state_unfiltered[:, 0],
-                    color=purple,
-                    linestyle='--',
-                    label="Unfiltered",
-                    linewidth=2,
+            # Add colorbar
+            # --- Create aligned, slightly shorter colorbar ---
+            if cax is None:
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="4%", pad=0.1)
+
+                # Create the colorbar manually
+                cbar = plt.colorbar(line, cax=cax)
+
+                # Tweak appearance
+                cbar.ax.tick_params(labelsize=10, width=1)  # tick font & thickness
+                cbar.set_label("|rudder_unfiltered - rudder_filtered|", fontsize=11, labelpad=6)
+
+                # Make the colorbar slightly shorter than the main axis
+                # (this uses transform math to crop the cbar height)
+                pos = cax.get_position()
+                shorten = 0.06  # fraction of height to trim from top and bottom
+                cax.set_position([pos.x0, pos.y0 + shorten/2 * pos.height, pos.width, pos.height * (1 - shorten)])
+
+                # Optional: add a subtle rounded border
+                for spine in cbar.ax.spines.values():
+                    spine.set_linewidth(1)
+                    spine.set_color("0.3")
+            else:
+                # sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+                # cbar = plt.colorbar(sm, cax=cax)
+                # cbar.set_label("|rudder_unfiltered - rudder_filtered|", fontsize=11)
+                # Create the colorbar manually
+                cbar = plt.colorbar(line, cax=cax)
+
+                pos = cax_top.get_position()
+                shorten = 0.32  # 5% height reduction
+                cax_top.set_position([
+                    pos.x0,
+                    pos.y0 + shorten * pos.height / 2,
+                    pos.width,
+                    pos.height * (1 - shorten),
+                ])
+
+                # Tweak appearance
+                cbar.ax.tick_params(labelsize=10, width=1)  # tick font & thickness
+                cbar.set_label("|rudder_unfiltered - rudder_filtered|", fontsize=11, labelpad=6)
+
+                # Make the colorbar slightly shorter than the main axis
+                # (this uses transform math to crop the cbar height)
+                pos = cax.get_position()
+                shorten = 0.06  # fraction of height to trim from top and bottom
+                cax.set_position([pos.x0, pos.y0 + shorten/2 * pos.height, pos.width, pos.height * (1 - shorten)])
+
+                # Optional: add a subtle rounded border
+                for spine in cbar.ax.spines.values():
+                    spine.set_linewidth(1)
+                    spine.set_color("0.3")
+        else:
+            ax.plot(T_state_gt[:, 1],
+                    T_state_gt[:, 0],
+                    color=dark_teal,
+                    label="GUARDIAN",
+                    linewidth=3.0,
                     zorder=10
                     )
-
-        # Add colorbar
-        # --- Create aligned, slightly shorter colorbar ---
-        if cax is None:
-            divider = make_axes_locatable(ax)
-            cax = divider.append_axes("right", size="4%", pad=0.1)
-
-            # Create the colorbar manually
-            cbar = plt.colorbar(line, cax=cax)
-
-            # Tweak appearance
-            cbar.ax.tick_params(labelsize=10, width=1)  # tick font & thickness
-            cbar.set_label("|rudder_unfiltered - rudder_filtered|", fontsize=11, labelpad=6)
-
-            # Make the colorbar slightly shorter than the main axis
-            # (this uses transform math to crop the cbar height)
-            pos = cax.get_position()
-            shorten = 0.06  # fraction of height to trim from top and bottom
-            cax.set_position([pos.x0, pos.y0 + shorten/2 * pos.height, pos.width, pos.height * (1 - shorten)])
-
-            # Optional: add a subtle rounded border
-            for spine in cbar.ax.spines.values():
-                spine.set_linewidth(1)
-                spine.set_color("0.3")
-        else:
-            # sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
-            # cbar = plt.colorbar(sm, cax=cax)
-            # cbar.set_label("|rudder_unfiltered - rudder_filtered|", fontsize=11)
-            # Create the colorbar manually
-            cbar = plt.colorbar(line, cax=cax)
-
-            pos = cax_top.get_position()
-            shorten = 0.32  # 5% height reduction
-            cax_top.set_position([
-                pos.x0,
-                pos.y0 + shorten * pos.height / 2,
-                pos.width,
-                pos.height * (1 - shorten),
-            ])
-
-            # Tweak appearance
-            cbar.ax.tick_params(labelsize=10, width=1)  # tick font & thickness
-            cbar.set_label("|rudder_unfiltered - rudder_filtered|", fontsize=11, labelpad=6)
-
-            # Make the colorbar slightly shorter than the main axis
-            # (this uses transform math to crop the cbar height)
-            pos = cax.get_position()
-            shorten = 0.06  # fraction of height to trim from top and bottom
-            cax.set_position([pos.x0, pos.y0 + shorten/2 * pos.height, pos.width, pos.height * (1 - shorten)])
-
-            # Optional: add a subtle rounded border
-            for spine in cbar.ax.spines.values():
-                spine.set_linewidth(1)
-                spine.set_color("0.3")
+            if T_state_unfiltered is not None:
+                ax.plot(T_state_unfiltered[:, 1],
+                        T_state_unfiltered[:, 0],
+                        color=purple,
+                        linestyle='--',
+                        label="HJ Filtering",
+                        linewidth=2,
+                        zorder=10
+                        )
+                ax.scatter(T_state_unfiltered[-2, 1], T_state_unfiltered[-2, 0], color=purple, marker='X', s=200, zorder=11)
 
         ax.fill_between(T_state_gt[:, 1], lows[:, 0], highs[:, 0], color=bounds_color, alpha=bounds_alpha, label="CTE Bounds", zorder=9)
+        ax.plot(T_state_gt[:, 1], highs[:, 0], color=bounds_line_color, alpha=bounds_line_alpha, linewidth=0.7, zorder=9)
+        ax.plot(T_state_gt[:, 1], lows[:, 0], color=bounds_line_color, alpha=bounds_line_alpha, linewidth=0.7, zorder=9)
+        
+        # ax.plot(T_state_gt[:, 1], np.zeros_like(T_state_gt[:, 1]), color=light_purple, linestyle='--', linewidth=0.5, label="Centerline", zorder=8)
         ax.set_aspect("equal")
         # ymin, ymax = ax.get_ylim()
         # ymin, ymax = min(ymin, -ylim), max(ymax, ylim)
+        ax.set_xlabel("DTP (m)")
+        ax.set_ylabel("CTE (m)", rotation=0, ha="right")
         ax.set_ylim(-ylim, ylim)
+        ax.set_yticks([-10, -5, 0, 5, 10])
         ax.axhspan(cte_constr, ylim, color=boundary_color, alpha=1.0)
         ax.axhspan(-cte_constr, -ylim, color=boundary_color, alpha=1.0)
+        ax.legend(framealpha=1.0, edgecolor="0.3", loc="upper left", fontsize=12)
     
     if not plot_u:
         fig, ax = plt.subplots(figsize=(18, 6))
-        plot_trajectory_helper(ax, T_state_gt, lows, highs, T_state_unfiltered)
+        plot_trajectory_helper(ax, T_state_gt, lows, highs, T_state_unfiltered, plot_cbar=plot_cbar)
     else:
 
         fig = plt.figure(figsize=(18, 10))
@@ -273,7 +295,7 @@ def plot_trajectory(data, settings, aux_data=None, plot_u=False):
 
         ax_bottom = fig.add_subplot(gs[1, 0], sharex=ax_top)
 
-        plot_trajectory_helper(ax_top, T_state_gt, lows, highs, T_state_unfiltered, cax=cax_top)
+        plot_trajectory_helper(ax_top, T_state_gt, lows, highs, T_state_unfiltered, cax=cax_top, plot_cbar=plot_cbar)
 
         ax_bottom.plot(T_state_gt[:, 1], T_rudder_filtered, color=pink, label="Rudder (filtered)", linewidth=1.5)
         ax_bottom.plot(T_state_gt[:, 1], T_rudder_unfiltered, color=dark_teal, label="Rudder (unfiltered)", linewidth=1.5)
@@ -285,12 +307,69 @@ def plot_trajectory(data, settings, aux_data=None, plot_u=False):
     # plt.close(fig)
 
 
+def plot_value_function(data, settings, frame_index=None, show=True):
+    if frame_index is None:
+        frame_index = 54  # default (your current choice)
+
+    lows = np.array([bound.lo for bound in data.get('T_state_bounds', [])])
+    highs = np.array([bound.hi for bound in data.get('T_state_bounds', [])])
+    if lows.size and lows.shape[1] > 1:
+        lows[:, 1] = np.rad2deg(lows[:, 1])
+        highs[:, 1] = np.rad2deg(highs[:, 1])
+
+    value_function = data['value_function']
+    grid = hj.Grid.from_lattice_parameters_and_boundary_conditions(
+        hj.sets.Box(np.array([-18., -np.pi/3]), np.array([18., np.pi/3])),
+        (100, 100),
+    )
+
+    colors = [black, purple, dark_orange]
+    cmap = mcolors.LinearSegmentedColormap.from_list("purple2orange", colors)
+
+    fig, ax = plt.subplots(figsize=(13, 8))
+    cs = ax.contourf(
+        grid.coordinate_vectors[0],
+        np.rad2deg(grid.coordinate_vectors[1]),
+        value_function[:, :].T,
+        levels=20, cmap=cmap)
+    plt.colorbar(cs, ax=ax)
+    ax.contour(
+        grid.coordinate_vectors[0],
+        np.rad2deg(grid.coordinate_vectors[1]),
+        value_function[:, :].T,
+        levels=0, colors=black, linewidths=3)
+    ax.set_xlabel("CTE [m]")
+    ax.set_ylabel("HE [deg]")
+
+    CTE_min, HE_min = lows[frame_index]
+    CTE_max, HE_max = highs[frame_index]
+    width = CTE_max - CTE_min
+    height = HE_max - HE_min
+
+    rect = plt.Rectangle(
+        (CTE_min, HE_min),
+        width, height,
+        linewidth=2,
+        edgecolor=light_teal,
+        facecolor=light_teal + [0.4],
+        linestyle='-',
+        label='state_bounds',
+        zorder=5)
+    ax.add_patch(rect)
+
+    if show:
+        plt.show()
+
+    return fig, ax, rect
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Plot simulation results.")
     parser.add_argument("--file", help="Path to the data file to load")
     parser.add_argument("--aux_file", help="Path to the auxiliary data file to load", default=None)
-    parser.add_argument("--plot_type", help="Type of plot to generate", choices=["states", "trajectory"])
+    parser.add_argument("--plot_type", help="Type of plot to generate", choices=["states", "trajectory", "value_function"], default="states")
     parser.add_argument("--plot_u", action="store_true", default=False, help="Whether to plot control inputs")
+    parser.add_argument("--cbar", action="store_true", default=False, help="Whether to plot colorbar")
     args = parser.parse_args()
 
-    plot_sim(args.file, args.plot_type, aux_file=args.aux_file, plot_u=args.plot_u)
+    plot_sim(args)

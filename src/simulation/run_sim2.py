@@ -890,7 +890,8 @@ def simulate_controller_dubins(
         "T_rudder": T_rudder,
         "T_rudder_filtered": T_rudder_filtered,
         "T_rudder_unfiltered": T_rudder_unfiltered,
-        "T_state_bounds": T_state_bounds
+        "T_state_bounds": T_state_bounds,
+        "value_function": hjnnv_filter.target_values if filtering else None,
     }
 
     os.makedirs(results_dir, exist_ok=True)
