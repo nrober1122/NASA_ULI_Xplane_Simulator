@@ -577,7 +577,7 @@ def simulate_controller_dubins(
                 pred_model=settings.GET_STATE_SMOOTHED,
                 grid=grid,
                 initial_values=values,
-                num_controls=10,
+                num_controls=30,
                 num_disturbances=15,
             )
         else:
@@ -586,7 +586,7 @@ def simulate_controller_dubins(
                 pred_model=settings.GET_STATE,
                 grid=grid,
                 initial_values=values,
-                num_controls=10,
+                num_controls=30,
                 num_disturbances=15,
             )
 
