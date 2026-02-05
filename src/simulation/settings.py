@@ -45,6 +45,7 @@ END_DTP = config["END_DTP"]
 DT = config["DT"]
 MAX_RUDDER = config["MAX_RUDDER"]
 CTRL_EVERY = config["CTRL_EVERY"]
+IMAGE_NOISE = config["IMAGE_NOISE"]
 
 # # Whether or not to override the X-Plane 11 simulator dynamics with a Dubin's car model
 # # True = Use Dubin's car model

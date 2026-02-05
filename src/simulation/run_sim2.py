@@ -55,8 +55,19 @@ def get_state(
         key=None
         ):
     # Process image before passing it to NN estimator
+    image_raw_noisy = np.copy(image_raw)
+    if key is not None and False:
+        image_raw_jnp = jnp.array(image_raw)
+        noise = np.array(jax.random.uniform(key, shape=image_raw_jnp.shape, minval=-settings.IMAGE_NOISE, maxval=settings.IMAGE_NOISE) * 255, dtype='int')
+        # ipdb.set_trace()
+        image_raw = np.clip(image_raw + noise, 0, 255).astype('uint8')
+    # ipdb.set_trace()
     image_processed = settings.PROCESS_IMG(image_raw)
     image_processed_jnp = jnp.array(image_processed)
+    if key is not None:
+        image_processed_jnp = jnp.array(image_processed)
+        noise = jax.random.uniform(key, shape=image_processed_jnp.shape, minval=-settings.IMAGE_NOISE, maxval=settings.IMAGE_NOISE)
+        image_processed = np.clip(image_processed + np.array(noise), 0.0, 1.0)
 
     if not settings.USING_TORCH:
         image_processed = jax.numpy.array(image_processed)
@@ -566,7 +577,7 @@ def simulate_controller_dubins(
                 pred_model=settings.GET_STATE_SMOOTHED,
                 grid=grid,
                 initial_values=values,
-                num_controls=30,
+                num_controls=10,
                 num_disturbances=15,
             )
         else:
@@ -575,7 +586,7 @@ def simulate_controller_dubins(
                 pred_model=settings.GET_STATE,
                 grid=grid,
                 initial_values=values,
-                num_controls=30,
+                num_controls=10,
                 num_disturbances=15,
             )
 
@@ -654,7 +665,7 @@ def simulate_controller_dubins(
     T_image_clean = results_dict.get('T_image_clean', [])
     T_image_est = results_dict.get('T_image_est', [])
     T_state_bounds = results_dict.get('T_state_bounds', [])
-    
+    T_filter_time = results_dict.get('T_filter_time', [])
     # ipdb.set_trace()
 
     cte_gt, dtp_gt, he_gt = xpc3_helper.getHomeState(client)
@@ -664,7 +675,7 @@ def simulate_controller_dubins(
     filtering = settings.FILTER
 
     image_raw = get_xplane_image()
-    cte_clean, he_clean, img_clean, adv_image = get_state(image_raw)
+    cte_clean, he_clean, img_clean, adv_image = get_state(image_raw, key=key)
     adv_img = None
 
     cte_pred, he_pred = cte_clean, he_clean
@@ -678,6 +689,7 @@ def simulate_controller_dubins(
         return (rudder - target_rudder)**2
 
     while dtp_dym < endDTP and now < run_end_time and np.abs(cte_gt) < 10.5:
+        key, subkey = jax.random.split(key)
         simLoopTimer = time.time()
         x_hat_prev = jnp.array([cte_pred, he_pred])
         x_hat_prev_clean = jnp.array([cte_clean, he_clean])
@@ -694,13 +706,13 @@ def simulate_controller_dubins(
         # Get the estimated state and control without attack
         # Need to think about this line more - should not be using x_prev_clean, but what is best thing to plot?
         # Plotting should be x_hat_prev, but error buffer should be calculated by x_hat_prev_clean
-        cte_clean, he_clean, img_clean, _ = get_state(image_raw, x_prev=x_hat_prev, u_prev=u_hat_prev,)
+        cte_clean, he_clean, img_clean, _ = get_state(image_raw, x_prev=x_hat_prev, u_prev=u_hat_prev, key=subkey)
         phiDeg_clean = get_control(client, cte_clean, he_clean)
         state_bounds = hj.sets.Box(lo=jnp.empty((2,)), hi=jnp.empty((2,)))
 
         target_rudder = settings.TARGET_FUNCTION(cte_gt, he_gt, settings.MAX_RUDDER)
         print("Target for attack:", target_rudder)
-        key, subkey = jax.random.split(key)
+        
         cte_pred, he_pred, img, adv_img = get_state(image_raw, x_prev=x_hat_prev, u_prev=u_hat_prev, target=target_rudder, attack=rudder_target, adv_ptb_prev=adv_img, key=subkey)
         logger.info("----------------------------------------------------------")
         logger.info("CTE: {:.2f} ({:.2f}), HE: {:.2f} ({:.2f})".format(cte_pred, cte_gt, he_pred, he_gt))
@@ -842,6 +854,8 @@ def simulate_controller_dubins(
 
         T_state_bounds.append(state_bounds)
 
+        T_filter_time.append(time_filter_total)
+
         # # Wait for next timestep. 1 Hz control rate?
         # while endTime - startTime < dt:
         #     endTime = client.getDREF("sim/time/zulu_time_sec")[0]
@@ -862,6 +876,10 @@ def simulate_controller_dubins(
         logger.info("Simulation loop time: {:.5f} seconds".format(time.time() - simLoopTimer))
 
     client.pauseSim(True)
+
+    print("Filter time average: {:.5f} s".format(np.mean(T_filter_time[1:])))
+    print("Filter time stdev: {:.5f} s".format(np.std(T_filter_time[1:])))
+    print("Simulation ended. Saving results...")
 
     if results_dict == {}:
         T_t = np.arange(len(T_state_gt)) * dt
