@@ -156,7 +156,7 @@ def main():
         client.sendDREF("sim/weather/cloud_type[0]", settings.CLOUD_COVER)
 
         if settings.DUBINS:
-            simulate_controller_dubins(
+            results = simulate_controller_dubins(
                 client,
                 settings.START_CTE,
                 settings.START_HE,
@@ -167,6 +167,7 @@ def main():
                 settings.DT,
                 settings.CTRL_EVERY,
             )
+            return results['results_dir']
         else:
             simulate_controller(
                 client,
