@@ -5,12 +5,16 @@ from typing import Optional
 import numpy as np
 import torch
 import yaml
+from pathlib import Path
 
 from attack.train_static_dnn import DNNAttackStatic
 
 _network: Optional[DNNAttackStatic] = None
 
-with open("config.yaml", "r") as f:
+THIS_DIR = Path(__file__).resolve().parent
+CONFIG_PATH = THIS_DIR / "config.yaml"
+
+with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
 
 def _load_network():

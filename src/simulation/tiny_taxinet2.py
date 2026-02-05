@@ -12,7 +12,12 @@ import jax.numpy as jnp
 # from utils.torch2jax import torch2jax
 from utils.torch2jaxmodel import torch_to_jax_model
 
-with open("config.yaml", "r") as f:
+from pathlib import Path
+
+THIS_DIR = Path(__file__).resolve().parent
+CONFIG_PATH = THIS_DIR / "config.yaml"
+
+with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
 
 # from tiny_taxinet_train.model_tiny_taxinet import TinyTaxiNetDNN

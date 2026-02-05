@@ -8,7 +8,7 @@ import Xlib.display
 import Xlib.X as X
 from loguru import logger
 from PIL import Image
-from tiny_taxinet import getCurrentImage
+from simulators.NASA_ULI_Xplane_Simulator.src.simulation.tiny_taxinet import getCurrentImage
 
 
 def get_xplane_image() -> np.ndarray:

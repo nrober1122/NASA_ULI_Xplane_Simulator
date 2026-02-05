@@ -6,11 +6,15 @@ import einops as ei
 import mss
 import numpy as np
 from loguru import logger
-from nnet import *
+from simulators.NASA_ULI_Xplane_Simulator.src.simulation.nnet import *
 from PIL import Image
+from pathlib import Path
+
+THIS_DIR = Path(__file__).resolve().parent
 
 # Read in the network
-filename = "../../models/TinyTaxiNet.nnet"
+
+filename = THIS_DIR / "../../models/TinyTaxiNet.nnet"
 network = NNet(filename)
 
 ### IMPORTANT PARAMETERS FOR IMAGE PROCESSING ###

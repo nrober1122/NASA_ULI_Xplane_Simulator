@@ -11,13 +11,18 @@ from simulators.NASA_ULI_Xplane_Simulator.src.simulation import static_atk_dnn
 from simulators.NASA_ULI_Xplane_Simulator.src.train_DNN import model_taxinet
 from utils.attacks import fgsm, pgd
 from functools import partial
+from pathlib import Path
 
 """ 
 Parameters to be specified by user
     - Change these parameters to determine the cases you want to gather data for
 """
-with open("config.yaml", "r") as f:
+THIS_DIR = Path(__file__).resolve().parent
+CONFIG_PATH = THIS_DIR / "config.yaml"
+
+with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
+
 
 # If you want to set variables from config dictionary:
 DUBINS = config["DUBINS"]

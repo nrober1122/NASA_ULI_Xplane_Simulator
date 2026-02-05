@@ -4,7 +4,7 @@ import jax.numpy as jnp
 from jax import lax
 import numpy as np
 import torch
-import pretrained_dnn
+import simulators.NASA_ULI_Xplane_Simulator.src.simulation.pretrained_dnn
 
 jax.config.update("jax_platform_name", "cpu")
 

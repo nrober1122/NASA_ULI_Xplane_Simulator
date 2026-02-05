@@ -23,7 +23,7 @@ from simulators.NASA_ULI_Xplane_Simulator.src.simulation import settings
 # import tiny_taxinet2
 from loguru import logger
 # from tiny_taxinet import process_image
-from xplane_screenshot import get_xplane_image
+from simulators.NASA_ULI_Xplane_Simulator.src.simulation.xplane_screenshot import get_xplane_image
 from PIL import Image
 import jax.numpy as jnp
 import jax
@@ -36,7 +36,7 @@ import hj_reachability as hj
 from hjnnv import hjnnvUncertaintyAwareFilter
 from utils.attacks import fgsm, pgd
 import dynamic_models
-import tiny_taxinet2
+import simulators.NASA_ULI_Xplane_Simulator.src.simulation.tiny_taxinet2
 import json
 import pickle
 

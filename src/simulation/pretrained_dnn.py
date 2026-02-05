@@ -2,6 +2,7 @@ import os
 import time
 from typing import Optional
 import yaml
+from pathlib import Path
 
 import cv2
 import mss
@@ -21,7 +22,10 @@ from simulators.NASA_ULI_Xplane_Simulator.src.simulation.tiny_taxinet2 import dy
 
 _network: Optional[TaxiNetDNN] = None
 
-with open("config.yaml", "r") as f:
+THIS_DIR = Path(__file__).resolve().parent
+CONFIG_PATH = THIS_DIR / "config.yaml"
+
+with open(CONFIG_PATH, "r") as f:
     config = yaml.safe_load(f)
 
 USING_TORCH = config["USING_TORCH"]
